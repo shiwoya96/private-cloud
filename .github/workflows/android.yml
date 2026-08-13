@@ -1,0 +1,97 @@
+name: Android CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint, unit tests and debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android 35 packages
+        run: sdkmanager "platforms;android-35" "build-tools;34.0.0"
+
+      - name: Set up Gradle 8.9
+        id: setup-gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.9'
+          cache-provider: basic
+
+      - name: Confirm build tool versions
+        run: |
+          test "${{ steps.setup-gradle.outputs.gradle-version }}" = "8.9"
+          java -version
+          gradle --version
+
+      - name: Run lint, unit tests and assemble debug APK
+        run: gradle --no-daemon --max-workers=2 --stacktrace :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Verify resolved security dependency
+        run: |
+          gradle --no-daemon --max-workers=2 --console=plain :app:dependencyInsight --configuration debugRuntimeClasspath --dependency org.bouncycastle:bcprov-jdk18on > dependency-insight.txt
+          grep -Fq 'org.bouncycastle:bcprov-jdk18on:1.84' dependency-insight.txt
+          ! grep -Fq 'org.bouncycastle:bcprov-jdk18on:1.76' dependency-insight.txt
+
+      - name: Verify APK signature
+        run: "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Write APK checksum
+        working-directory: app/build/outputs/apk/debug
+        run: sha256sum app-debug.apk > app-debug.apk.sha256
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: private-cloud-debug-apk-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/debug/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload unit-test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: private-cloud-unit-test-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          path: app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: private-cloud-lint-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: warn
+          retention-days: 14

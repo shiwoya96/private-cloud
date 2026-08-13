@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/pc_surface_subtle"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/pc_screen_padding"
+    android:paddingTop="@dimen/pc_space_24"
+    android:paddingEnd="@dimen/pc_screen_padding"
+    android:paddingBottom="@dimen/pc_space_32">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/pc_app_title"
+        android:textColor="@color/pc_text_primary"
+        android:textSize="28sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/pc_space_4"
+        android:layout_marginBottom="@dimen/pc_space_16"
+        android:text="@string/pc_app_subtitle"
+        android:textColor="@color/pc_text_secondary"
+        android:textSize="15sp" />
+
+    <LinearLayout
+        style="@style/PcWarningCard"
+        android:importantForAccessibility="yes"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/PcWarningTitle"
+            android:text="@string/pc_security_title" />
+
+        <TextView
+            style="@style/PcBodyText"
+            android:layout_marginTop="@dimen/pc_space_4"
+            android:text="@string/pc_security_message"
+            android:textColor="@color/pc_warning_text" />
+    </LinearLayout>
+
+    <LinearLayout
+        style="@style/PcSectionCard"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/PcSectionTitle"
+            android:text="@string/pc_server_section_title" />
+
+        <TextView
+            style="@style/PcFieldLabel"
+            android:text="@string/pc_protocol_label" />
+
+        <RadioGroup
+            android:id="@+id/pc_protocol_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/pc_protocol_webdav"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checked="true"
+                android:minHeight="@dimen/pc_touch_target"
+                android:text="@string/pc_protocol_webdav"
+                android:textColor="@color/pc_text_primary" />
+
+            <RadioButton
+                android:id="@+id/pc_protocol_smb"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="@dimen/pc_touch_target"
+                android:text="@string/pc_protocol_smb"
+                android:textColor="@color/pc_text_primary" />
+        </RadioGroup>
+
+        <LinearLayout
+            android:id="@+id/pc_webdav_fields"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <EditText
+                android:id="@+id/pc_webdav_url"
+                style="@style/PcEditText"
+                android:autofillHints="url"
+                android:hint="@string/pc_hint_webdav_url"
+                android:imeOptions="actionNext"
+                android:inputType="textUri"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/pc_smb_fields"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/pc_smb_host"
+                style="@style/PcEditText"
+                android:hint="@string/pc_hint_smb_host"
+                android:imeOptions="actionNext"
+                android:inputType="textUri"
+                android:maxLines="1" />
+
+            <EditText
+                android:id="@+id/pc_smb_port"
+                style="@style/PcEditText"
+                android:digits="0123456789"
+                android:hint="@string/pc_hint_smb_port"
+                android:imeOptions="actionNext"
+                android:inputType="number"
+                android:maxLength="5"
+                android:maxLines="1"
+                android:text="@string/pc_default_smb_port" />
+
+            <EditText
+                android:id="@+id/pc_smb_share"
+                style="@style/PcEditText"
+                android:hint="@string/pc_hint_smb_share"
+                android:imeOptions="actionNext"
+                android:inputType="text"
+                android:maxLines="1" />
+
+            <EditText
+                android:id="@+id/pc_smb_domain"
+                style="@style/PcEditText"
+                android:hint="@string/pc_hint_smb_domain"
+                android:imeOptions="actionNext"
+                android:inputType="textCapCharacters"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/pc_username"
+            style="@style/PcEditText"
+            android:autofillHints="username"
+            android:hint="@string/pc_hint_username"
+            android:imeOptions="actionNext"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <EditText
+            android:id="@+id/pc_password"
+            style="@style/PcEditText"
+            android:autofillHints="password"
+            android:hint="@string/pc_hint_password"
+            android:imeOptions="actionNext"
+            android:inputType="textPassword"
+            android:maxLines="1"
+            android:saveEnabled="false" />
+
+        <EditText
+            android:id="@+id/pc_remote_path"
+            style="@style/PcEditText"
+            android:hint="@string/pc_hint_webdav_remote_path"
+            android:imeOptions="actionDone"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <Button
+            android:id="@+id/pc_test_connection"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_test_connection" />
+    </LinearLayout>
+
+    <LinearLayout
+        style="@style/PcSectionCard"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/PcSectionTitle"
+            android:text="@string/pc_local_section_title" />
+
+        <TextView
+            style="@style/PcBodyText"
+            android:text="@string/pc_local_section_description" />
+
+        <TextView
+            android:id="@+id/pc_selected_folder"
+            style="@style/PcValueText"
+            android:layout_marginTop="@dimen/pc_space_12"
+            android:text="@string/pc_folder_not_selected" />
+
+        <Button
+            android:id="@+id/pc_choose_folder"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_choose_folder" />
+
+        <Button
+            android:id="@+id/pc_start_backup"
+            style="@style/PcPrimaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:enabled="false"
+            android:text="@string/pc_action_backup_now" />
+    </LinearLayout>
+
+    <LinearLayout
+        style="@style/PcSectionCard"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/PcSectionTitle"
+            android:text="@string/pc_restore_section_title" />
+
+        <TextView
+            style="@style/PcBodyText"
+            android:text="@string/pc_restore_section_description" />
+
+        <Button
+            android:id="@+id/pc_load_snapshots"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_load_snapshots" />
+
+        <TextView
+            android:id="@+id/pc_snapshot_empty"
+            style="@style/PcValueText"
+            android:layout_marginTop="@dimen/pc_space_12"
+            android:text="@string/pc_snapshot_empty" />
+
+        <RadioGroup
+            android:id="@+id/pc_snapshot_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:orientation="vertical"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/pc_restore_snapshot"
+            style="@style/PcDangerButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:enabled="false"
+            android:text="@string/pc_action_restore_selected" />
+    </LinearLayout>
+
+    <LinearLayout
+        style="@style/PcSectionCard"
+        android:layout_marginBottom="0dp"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/PcSectionTitle"
+            android:text="@string/pc_operation_section_title" />
+
+        <TextView
+            android:id="@+id/pc_operation_status"
+            style="@style/PcStatusText"
+            android:accessibilityLiveRegion="polite"
+            android:text="@string/pc_status_idle" />
+
+        <ProgressBar
+            android:id="@+id/pc_operation_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/pc_space_12"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/pc_operation_detail"
+            style="@style/PcBodyText"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/pc_cancel_operation"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_cancel"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

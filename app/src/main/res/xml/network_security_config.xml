@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+      HTTP is temporarily permitted because the connection form explicitly accepts http://
+      WebDAV endpoints. Prefer HTTPS. If HTTP support is removed, set this and the manifest
+      usesCleartextTraffic flag to false together.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

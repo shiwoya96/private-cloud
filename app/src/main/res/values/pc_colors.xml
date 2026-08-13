@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pc_surface">#FFFDFB</color>
+    <color name="pc_surface_subtle">#F4F6F8</color>
+    <color name="pc_border">#D9DEE5</color>
+    <color name="pc_text_primary">#17202A</color>
+    <color name="pc_text_secondary">#59636E</color>
+    <color name="pc_primary">#1769AA</color>
+    <color name="pc_primary_pressed">#0F4F83</color>
+    <color name="pc_on_primary">#FFFFFF</color>
+    <color name="pc_warning_surface">#FFF4D6</color>
+    <color name="pc_warning_border">#E6A700</color>
+    <color name="pc_warning_text">#614A00</color>
+    <color name="pc_danger">#B3261E</color>
+    <color name="pc_status_running">#1769AA</color>
+    <color name="pc_status_success">#237A3B</color>
+    <color name="pc_status_error">#B3261E</color>
+</resources>

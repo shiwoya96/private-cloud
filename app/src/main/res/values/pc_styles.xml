@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="PcSectionCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">@dimen/pc_space_16</item>
+        <item name="android:background">@drawable/pc_bg_card</item>
+        <item name="android:padding">@dimen/pc_card_padding</item>
+    </style>
+
+    <style name="PcWarningCard" parent="PcSectionCard">
+        <item name="android:background">@drawable/pc_bg_warning</item>
+    </style>
+
+    <style name="PcSectionTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">@dimen/pc_space_8</item>
+        <item name="android:textColor">@color/pc_text_primary</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="PcWarningTitle" parent="PcSectionTitle">
+        <item name="android:layout_marginBottom">0dp</item>
+        <item name="android:textColor">@color/pc_warning_text</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="PcBodyText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/pc_text_secondary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="PcFieldLabel" parent="PcBodyText">
+        <item name="android:layout_marginTop">@dimen/pc_space_4</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="PcEditText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/pc_space_8</item>
+        <item name="android:minHeight">@dimen/pc_touch_target</item>
+        <item name="android:textColor">@color/pc_text_primary</item>
+        <item name="android:textColorHint">@color/pc_text_secondary</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="PcValueText" parent="PcBodyText">
+        <item name="android:background">@drawable/pc_bg_value</item>
+        <item name="android:padding">@dimen/pc_space_12</item>
+        <item name="android:textIsSelectable">true</item>
+    </style>
+
+    <style name="PcStatusText" parent="PcValueText">
+        <item name="android:textIsSelectable">false</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="PcSecondaryButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">@dimen/pc_touch_target</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="PcPrimaryButton" parent="PcSecondaryButton">
+        <item name="android:backgroundTint">@color/pc_primary</item>
+        <item name="android:textColor">@color/pc_on_primary</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="PcDangerButton" parent="PcSecondaryButton">
+        <item name="android:textColor">@color/pc_danger</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>

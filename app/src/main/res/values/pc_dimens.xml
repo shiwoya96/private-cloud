@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="pc_screen_padding">16dp</dimen>
+    <dimen name="pc_card_padding">16dp</dimen>
+    <dimen name="pc_card_radius">12dp</dimen>
+    <dimen name="pc_touch_target">48dp</dimen>
+    <dimen name="pc_space_4">4dp</dimen>
+    <dimen name="pc_space_8">8dp</dimen>
+    <dimen name="pc_space_12">12dp</dimen>
+    <dimen name="pc_space_16">16dp</dimen>
+    <dimen name="pc_space_24">24dp</dimen>
+    <dimen name="pc_space_32">32dp</dimen>
+</resources>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pc_app_title">私有云备份</string>
+    <string name="pc_app_subtitle">把指定手机目录备份到你自己的服务器，也可从远端快照恢复。</string>
+
+    <string name="pc_security_title">安全提醒</string>
+    <string name="pc_security_message">仅连接你信任的服务器，WebDAV 优先使用 HTTPS，SMB 建议启用 SMB 3 加密。恢复会创建新目录且不覆盖原文件，仍请先核对目标目录和快照。</string>
+
+    <string name="pc_server_section_title">1. 服务器配置</string>
+    <string name="pc_protocol_label">连接方式</string>
+    <string name="pc_protocol_webdav">WebDAV</string>
+    <string name="pc_protocol_smb">SMB</string>
+    <string name="pc_hint_webdav_url">服务器地址，例如 https://cloud.example.com/dav</string>
+    <string name="pc_hint_smb_host">服务器地址，例如 192.168.1.10</string>
+    <string name="pc_hint_smb_port">端口（默认 445）</string>
+    <string name="pc_default_smb_port" translatable="false">445</string>
+    <string name="pc_hint_smb_share">共享名称，例如 backup</string>
+    <string name="pc_hint_smb_domain">域（可选）</string>
+    <string name="pc_hint_username">用户名（匿名访问可留空）</string>
+    <string name="pc_hint_password">密码（匿名访问可留空）</string>
+    <string name="pc_hint_webdav_remote_path">远端目录（可选），例如 phone-backups</string>
+    <string name="pc_hint_smb_remote_path">共享内目录（可选），例如 phone-backups</string>
+    <string name="pc_action_test_connection">测试连接</string>
+
+    <string name="pc_local_section_title">2. 手机目录与备份</string>
+    <string name="pc_local_section_description">请选择一个目录。应用只会访问 Android 授权的目录及其子目录。</string>
+    <string name="pc_folder_not_selected">尚未选择手机目录</string>
+    <string name="pc_action_choose_folder">选择手机目录</string>
+    <string name="pc_action_backup_now">立即备份</string>
+    <string name="pc_a11y_selected_folder">已选择目录：%1$s</string>
+
+    <string name="pc_restore_section_title">3. 从备份恢复</string>
+    <string name="pc_restore_section_description">读取服务器上的可用快照，选择一个后拉取到上方指定的手机目录。</string>
+    <string name="pc_action_load_snapshots">查看远端快照</string>
+    <string name="pc_snapshot_empty">尚未读取远端快照</string>
+    <string name="pc_snapshot_label">%1$s\n%2$s</string>
+    <string name="pc_action_restore_selected">恢复所选快照</string>
+
+    <string name="pc_operation_section_title">任务状态</string>
+    <string name="pc_status_idle">等待操作</string>
+    <string name="pc_status_working">正在处理…</string>
+    <string name="pc_status_testing">正在测试连接…</string>
+    <string name="pc_status_preparing_backup">正在准备备份…</string>
+    <string name="pc_status_loading_snapshots">正在读取远端快照…</string>
+    <string name="pc_status_snapshots_loaded">已读取 %1$d 个远端快照</string>
+    <string name="pc_status_preparing_restore">正在准备恢复…</string>
+    <string name="pc_status_progress">已完成 %1$d%%</string>
+    <string name="pc_status_cancelling">正在取消…</string>
+    <string name="pc_status_success">操作完成</string>
+    <string name="pc_status_failed">操作失败</string>
+    <string name="pc_action_cancel">取消当前任务</string>
+
+    <string name="pc_error_webdav_url">请输入有效的 HTTP(S) WebDAV 地址，不要在地址中填写凭据、查询或片段</string>
+    <string name="pc_error_webdav_username">WebDAV 用户名不能包含冒号</string>
+    <string name="pc_error_smb_host">请输入不含协议或路径的 SMB 服务器地址</string>
+    <string name="pc_error_smb_port">SMB 端口必须在 1 到 65535 之间</string>
+    <string name="pc_error_smb_share">请输入不含斜杠的 SMB 共享名称</string>
+    <string name="pc_error_folder_required">请先选择手机目录</string>
+    <string name="pc_error_snapshot_required">请选择要恢复的远端快照</string>
+    <string name="pc_error_no_controller">界面尚未连接到任务控制器</string>
+</resources>

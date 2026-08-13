@@ -1,0 +1,30 @@
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Android / Gradle build output
+.gradle/
+build/
+**/build/
+local.properties
+.cxx/
+.externalNativeBuild/
+captures/
+
+# Signing material and machine-local secrets
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+secrets.properties
+*.pem
+*.p12
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
