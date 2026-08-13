@@ -44,6 +44,14 @@ android {
         abortOnError true
         checkDependencies true
     }
+
+    packaging {
+        resources {
+            // Both Bouncy Castle and jspecify ship this Java 9 OSGi descriptor. It is not
+            // consumed on Android and otherwise collides during mergeDebugJavaResource.
+            excludes += '/META-INF/versions/9/OSGI-INF/MANIFEST.MF'
+        }
+    }
 }
 
 dependencies {
