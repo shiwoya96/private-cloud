@@ -53,7 +53,33 @@ jobs:
           gradle --version
 
       - name: Run lint, unit tests and assemble debug APK
-        run: gradle --no-daemon --max-workers=2 --stacktrace :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+        run: |
+          set -o pipefail
+          gradle --no-daemon --max-workers=2 --stacktrace :app:lintDebug :app:testDebugUnitTest :app:assembleDebug 2>&1 | tee gradle-build.log
+
+      - name: Publish concise Gradle failure annotation
+        if: failure()
+        env:
+          BUILD_LOG: gradle-build.log
+        run: |
+          python3 - <<'PY'
+          import os
+
+          path = os.environ["BUILD_LOG"]
+          if not os.path.isfile(path):
+              print("::error title=Gradle build failed::Gradle did not create a build log")
+              raise SystemExit(0)
+
+          with open(path, "r", encoding="utf-8", errors="replace") as stream:
+              text = stream.read()
+          markers = ("FAILURE:", "* What went wrong:", "error:", "FAILED")
+          positions = [text.rfind(marker) for marker in markers]
+          start = max(positions)
+          excerpt = text[start if start >= 0 else max(0, len(text) - 7000):]
+          excerpt = excerpt[-7000:]
+          escaped = excerpt.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Gradle build failed::{escaped}")
+          PY
 
       - name: Verify resolved security dependency
         run: |
