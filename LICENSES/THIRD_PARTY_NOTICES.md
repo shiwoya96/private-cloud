@@ -6,7 +6,7 @@
 
 | 组件 | 坐标 / 版本 | 许可证 | 上游 |
 | --- | --- | --- | --- |
-| OkHttp | `com.squareup.okhttp3:okhttp:5.4.0` | Apache License 2.0 | <https://github.com/square/okhttp> |
+| OkHttp | `com.squareup.okhttp3:okhttp:5.3.2` | Apache License 2.0 | <https://github.com/square/okhttp> |
 | Okio（传递） | `com.squareup.okio:*` | Apache License 2.0 | <https://github.com/square/okio> |
 | Kotlin 标准库（传递） | `org.jetbrains.kotlin:kotlin-stdlib` | Apache License 2.0 | <https://github.com/JetBrains/kotlin> |
 | AndroidX WorkManager | `androidx.work:work-runtime:2.11.2` | Apache License 2.0 | <https://android.googlesource.com/platform/frameworks/support/> |

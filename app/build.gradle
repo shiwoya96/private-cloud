@@ -47,7 +47,9 @@ android {
 }
 
 dependencies {
-    implementation 'com.squareup.okhttp3:okhttp:5.4.0'
+    // 5.4.0's Android artifact requires compileSdk 36. Version 5.3.2 retains the
+    // same public API used here while remaining compatible with this API 35 build.
+    implementation 'com.squareup.okhttp3:okhttp:5.3.2'
     implementation('eu.agno3.jcifs:jcifs-ng:2.1.10') {
         // The upstream POM pins bcprov-jdk18on 1.76. Keep it out of the graph and
         // supply the security-fixed, API-compatible version explicitly below.
