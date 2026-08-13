@@ -67,5 +67,5 @@ dependencies {
 
     testImplementation 'junit:junit:4.13.2'
     // Android's mockable android.jar has stubbed org.json methods in local JVM tests.
-    testImplementation 'org.json:json:20260719'
+    testImplementation 'org.json:json:20260522'
 }

@@ -56,6 +56,7 @@ public final class BackupEngine {
                                 entry.displayPath()));
                     }
                 });
+        safeSource.refreshRoot(root);
 
         long totalFiles = 0L;
         long knownTotalBytes = 0L;
@@ -162,6 +163,7 @@ public final class BackupEngine {
                     displayPath));
         }
 
+        safeSource.refreshRoot(root);
         cancellation.throwIfCancellationRequested();
         final SnapshotManifest manifest;
         try {

@@ -15,7 +15,7 @@
 | SLF4J API / Android backend | `org.slf4j:*:1.7.36` | MIT License | <https://www.slf4j.org/> |
 | Bouncy Castle（排除 jcifs-ng 1.76 后显式引入） | `org.bouncycastle:bcprov-jdk18on:1.84` | Bouncy Castle License | <https://www.bouncycastle.org/> |
 | JUnit（仅测试） | `junit:junit:4.13.2` | Eclipse Public License 1.0 | <https://junit.org/junit4/> |
-| JSON-java（仅测试） | `org.json:json:20260719` | Public Domain | <https://github.com/stleary/JSON-java> |
+| JSON-java（仅测试） | `org.json:json:20260522` | Public Domain | <https://github.com/stleary/JSON-java> |
 
 许可证原文：
 

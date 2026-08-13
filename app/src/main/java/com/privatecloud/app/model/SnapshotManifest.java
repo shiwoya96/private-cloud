@@ -26,7 +26,7 @@ import org.json.JSONTokener;
 public final class SnapshotManifest {
     public static final int SCHEMA_VERSION = 1;
     public static final int MAX_ENTRIES = 100_000;
-    public static final int MAX_JSON_BYTES = 64 * 1024 * 1024;
+    public static final int MAX_JSON_BYTES = 16 * 1024 * 1024;
     /** Stable remote namespace for the MVP's single active backup plan. */
     public static final String DEFAULT_PLAN_ID = "default-plan";
 
@@ -326,12 +326,13 @@ public final class SnapshotManifest {
         return decoded.toString();
     }
 
+    /** Parses exactly one JSON object; Android JSONTokener uses '\0' as its EOF sentinel. */
     private static JSONObject decodeObject(byte[] bytes)
             throws CharacterCodingException, JSONException {
         JSONTokener tokens = new JSONTokener(decodeUtf8(bytes));
         Object value = tokens.nextValue();
-        if (!(value instanceof JSONObject) || tokens.nextClean() != 0) {
-            throw new JSONException("Expected one complete JSON object");
+        if (!(value instanceof JSONObject) || tokens.nextClean() != '\0') {
+            throw new JSONException("Expected exactly one JSON object");
         }
         return (JSONObject) value;
     }

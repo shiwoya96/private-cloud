@@ -58,4 +58,13 @@ public final class SnapshotManifestTest {
                 ManifestEntry.pathKey(Arrays.asList("a", "bc"), 2),
                 ManifestEntry.pathKey(Arrays.asList("ab", "c"), 2));
     }
+
+    @Test(expected = java.io.IOException.class)
+    public void rejectsTrailingJsonData() throws Exception {
+        SnapshotManifest.fromJsonBytes((
+                "{\"schema\":1,\"planId\":\"default-plan\","
+                        + "\"snapshotId\":\"snapshot-1\",\"createdAt\":1,"
+                        + "\"sourceName\":\"source\",\"entries\":[]} trailing")
+                .getBytes("UTF-8"));
+    }
 }

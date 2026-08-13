@@ -68,6 +68,11 @@ public final class SafTree {
             validateDocumentId(rootDocumentId);
             rootDocumentUri = DocumentsContract.buildDocumentUriUsingTree(
                     treeUri, rootDocumentId);
+            if (rootDocumentUri == null
+                    || !authority.equals(rootDocumentUri.getAuthority())) {
+                throw new IllegalArgumentException(
+                        "Tree document URI escaped its provider authority");
+            }
         } catch (IllegalArgumentException invalid) {
             throw new IllegalArgumentException("Invalid Storage Access Framework tree URI", invalid);
         }
@@ -111,6 +116,22 @@ public final class SafTree {
 
     public SafDocument getRootDocument() throws IOException {
         return queryDocument(rootDocumentUri, Collections.<String>emptyList());
+    }
+
+    /** Re-queries the selected root and verifies it is still the same directory. */
+    public SafDocument refreshRoot(SafDocument root) throws IOException {
+        if (root == null || !root.getPathSegments().isEmpty()) {
+            throw new IOException("Document is not the selected SAF root");
+        }
+        requireBelongsToTree(root);
+        if (!rootDocumentId.equals(root.getDocumentId())) {
+            throw new IOException("Document is not the selected SAF root");
+        }
+        SafDocument refreshed = queryDocument(rootDocumentUri, Collections.<String>emptyList());
+        if (!sameDocumentIdentity(refreshed, root)) {
+            throw new IOException("Selected SAF root changed identity");
+        }
+        return refreshed;
     }
 
     public void requirePersistedReadPermission() throws IOException {
@@ -191,10 +212,8 @@ public final class SafTree {
     public SafDocument refresh(SafDocument document) throws IOException {
         requireBelongsToTree(document);
         SafDocument refreshed = queryDocument(document.getUri(), document.getPathSegments());
-        if (!refreshed.getDocumentId().equals(document.getDocumentId())
-                || !refreshed.getDisplayName().equals(document.getDisplayName())
-                || refreshed.isDirectory() != document.isDirectory()) {
-            throw new IOException("Source document changed identity during backup");
+        if (!sameDocumentIdentity(refreshed, document)) {
+            throw new IOException("Document changed identity while it was being processed");
         }
         return refreshed;
     }
@@ -257,6 +276,10 @@ public final class SafTree {
         }
         if (!createdDocumentIds.contains(document.getDocumentId())) {
             throw new IOException("Refusing to open a pre-existing SAF document for writing");
+        }
+        SafDocument current = queryDocument(document.getUri(), document.getPathSegments());
+        if (!sameDocumentIdentity(current, document)) {
+            throw new IOException("Restore file changed identity before it was written");
         }
         if (!openedForWriteDocumentIds.add(document.getDocumentId())) {
             throw new IOException("Refusing to reopen a restore file for writing");
@@ -574,6 +597,12 @@ public final class SafTree {
             }
         }
         return null;
+    }
+
+    private static boolean sameDocumentIdentity(SafDocument left, SafDocument right) {
+        return left.getDocumentId().equals(right.getDocumentId())
+                && left.getDisplayName().equals(right.getDisplayName())
+                && left.isDirectory() == right.isDirectory();
     }
 
     private static String requiredColumn(Cursor cursor, int index, String name)

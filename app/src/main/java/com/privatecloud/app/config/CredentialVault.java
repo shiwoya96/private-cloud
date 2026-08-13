@@ -14,7 +14,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
-/** Stores small secrets encrypted by a non-exportable Android Keystore key. */
+/** Encrypts small secrets with a non-exportable Android Keystore key. */
 final class CredentialVault {
     private static final String KEYSTORE = "AndroidKeyStore";
     private static final String ALIAS = "private_cloud_credentials_v1";
@@ -22,29 +22,32 @@ final class CredentialVault {
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final int TAG_BITS = 128;
 
-    private final SharedPreferences preferences;
+    private final SharedPreferences legacyPreferences;
 
     CredentialVault(Context context) {
-        preferences = context.getApplicationContext()
+        legacyPreferences = context.getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    synchronized void put(String name, String value) throws GeneralSecurityException {
+    /**
+     * Returns a self-contained IV/ciphertext value. The caller decides whether an atomic
+     * preference transaction or WorkManager Data owns the encrypted envelope.
+     */
+    synchronized String encrypt(String name, String value) throws GeneralSecurityException {
         if (name == null || name.isEmpty()) throw new IllegalArgumentException("Missing secret name");
         Cipher cipher = Cipher.getInstance(TRANSFORMATION);
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
         cipher.updateAAD(aad(name));
         byte[] ciphertext = cipher.doFinal(safe(value).getBytes(StandardCharsets.UTF_8));
-        String encoded = Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)
+        return Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)
                 + "." + Base64.encodeToString(ciphertext, Base64.NO_WRAP);
-        if (!preferences.edit().putString(name, encoded).commit()) {
-            throw new GeneralSecurityException("Unable to persist encrypted credentials");
-        }
     }
 
-    synchronized String get(String name) throws GeneralSecurityException {
-        String encoded = preferences.getString(name, null);
-        if (encoded == null) return "";
+    synchronized String decrypt(String name, String encoded) throws GeneralSecurityException {
+        if (name == null || name.isEmpty()) throw new IllegalArgumentException("Missing secret name");
+        if (encoded == null || encoded.isEmpty()) {
+            throw new GeneralSecurityException("Stored credential is missing");
+        }
         int separator = encoded.indexOf('.');
         if (separator <= 0 || separator == encoded.length() - 1) {
             throw new GeneralSecurityException("Stored credential is damaged");
@@ -62,11 +65,16 @@ final class CredentialVault {
         }
     }
 
-    synchronized void remove(String name) {
-        preferences.edit().remove(name).commit();
+    /** Reads credentials written by the pre-snapshot storage layout for one-time migration. */
+    synchronized String getLegacyCiphertext(String name) {
+        return legacyPreferences.getString(name, null);
     }
 
-    private SecretKey getOrCreateKey() throws GeneralSecurityException {
+    synchronized void removeLegacyCiphertext(String name) {
+        legacyPreferences.edit().remove(name).commit();
+    }
+
+    private static synchronized SecretKey getOrCreateKey() throws GeneralSecurityException {
         KeyStore keyStore = KeyStore.getInstance(KEYSTORE);
         try {
             keyStore.load(null);

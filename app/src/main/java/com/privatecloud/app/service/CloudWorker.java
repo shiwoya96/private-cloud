@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.net.Uri;
 import android.os.Build;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.work.Data;
@@ -22,9 +23,9 @@ import com.privatecloud.app.backup.CancellationToken;
 import com.privatecloud.app.backup.OperationCancelledException;
 import com.privatecloud.app.backup.ProgressListener;
 import com.privatecloud.app.backup.RestoreEngine;
-import com.privatecloud.app.backup.RestoreResult;
 import com.privatecloud.app.backup.SnapshotRepository;
 import com.privatecloud.app.config.ConnectionSettings;
+import com.privatecloud.app.config.OperationSpec;
 import com.privatecloud.app.config.SettingsRepository;
 import com.privatecloud.app.config.SnapshotCache;
 import com.privatecloud.app.local.SafTree;
@@ -45,13 +46,10 @@ public final class CloudWorker extends Worker {
     public static final String UNIQUE_WORK_NAME = "private-cloud-active-operation";
     public static final String TAG = "private-cloud-operation";
 
-    public static final String KEY_OPERATION = "operation";
-    public static final String KEY_SNAPSHOT_ID = "snapshot_id";
+    public static final String KEY_ENCRYPTED_SPEC = "encrypted_operation_spec";
     public static final String KEY_PERCENT = "percent";
-    public static final String KEY_DETAIL = "detail";
     public static final String KEY_STAGE = "stage";
     public static final String KEY_MESSAGE = "message";
-    public static final String KEY_RESULT_SNAPSHOT_ID = "result_snapshot_id";
 
     public static final String OP_TEST = "test";
     public static final String OP_BACKUP = "backup";
@@ -68,15 +66,15 @@ public final class CloudWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
-        String operation = getInputData().getString(KEY_OPERATION);
-        if (!isKnownOperation(operation)) {
-            return failure("未知任务类型");
-        }
-
         SettingsRepository settingsRepository = new SettingsRepository(getApplicationContext());
         ConnectionSettings settings = null;
         try {
-            settings = settingsRepository.load();
+            OperationSpec spec = settingsRepository.decryptOperation(
+                    getId().toString(), getInputData().getString(KEY_ENCRYPTED_SPEC));
+            OperationSpec.validateSemantics(spec);
+            String operation = spec.getOperation();
+
+            settings = spec.getSettings();
             if (OP_BACKUP.equals(operation) || OP_RESTORE.equals(operation)) {
                 startForeground(operation);
             }
@@ -103,42 +101,42 @@ public final class CloudWorker extends Worker {
                             settings.getPlanId(), cancellation, progress);
                     new SnapshotCache(getApplicationContext()).save(
                             settings.getPlanId(), snapshots);
-                    return success("已读取 " + snapshots.size() + " 个可用快照");
+                    return success("快照列表读取完成");
                 }
 
-                Uri treeUri = settingsRepository.loadTreeUri();
+                Uri treeUri = spec.getTreeUri().isEmpty() ? null : Uri.parse(spec.getTreeUri());
                 if (treeUri == null) {
                     throw new IOException("手机目录授权不存在，请重新选择目录");
                 }
                 SafTree tree = new SafTree(getApplicationContext(), treeUri);
                 if (OP_BACKUP.equals(operation)) {
-                    SnapshotInfo snapshot = new BackupEngine(store).backup(
+                    new BackupEngine(store).backup(
                             settings.getPlanId(), tree, cancellation, progress);
-                    return Result.success(new Data.Builder()
-                            .putString(KEY_MESSAGE, "备份完成：" + snapshot.getFileCount() + " 个文件")
-                            .putString(KEY_RESULT_SNAPSHOT_ID, snapshot.getSnapshotId())
-                            .build());
+                    return success("备份完成");
                 }
 
-                String snapshotId = getInputData().getString(KEY_SNAPSHOT_ID);
-                if (snapshotId == null || snapshotId.isEmpty()) {
-                    throw new IOException("没有指定要恢复的快照");
-                }
-                RestoreResult restored = new RestoreEngine(store).restore(
-                        settings.getPlanId(), snapshotId, tree, cancellation, progress);
-                return success("已恢复 " + restored.getRestoredFiles()
-                        + " 个文件到新目录 " + restored.getDirectoryName());
+                new RestoreEngine(store).restore(
+                        settings.getPlanId(), spec.getSnapshotId(), tree, cancellation, progress);
+                return success("恢复完成");
             }
         } catch (OperationCancelledException cancelled) {
             return failure("任务已取消");
         } catch (GeneralSecurityException security) {
-            return failure("无法解密本机保存的凭据，请重新填写服务器密码");
+            return failure("后台任务配置不可用或凭据无法解密，请返回应用重新发起");
+        } catch (RemoteStoreException remote) {
+            if (remote.getStatusCode() == 401 || remote.getStatusCode() == 403) {
+                return failure("服务器拒绝登录，请检查账号和密码");
+            }
+            if (remote.getStatusCode() == 507) {
+                return failure("服务器存储空间不足");
+            }
+            return failure("远端服务操作失败，请检查服务器状态");
         } catch (IOException failure) {
-            return failure(safeError(failure, settings));
+            return failure("网络或文件操作失败，请检查连接和目录授权");
         } catch (IllegalArgumentException invalidConfiguration) {
-            return failure("服务器配置无效：" + safeError(invalidConfiguration, settings));
+            return failure("服务器配置或后台任务参数无效，请重新填写");
         } catch (RuntimeException unexpected) {
-            return failure("任务失败：" + safeError(unexpected, settings));
+            return failure("任务执行失败，请重试");
         }
     }
 
@@ -163,10 +161,12 @@ public final class CloudWorker extends Worker {
                 .setOnlyAlertOnce(true)
                 .setProgress(0, 0, true)
                 .build();
+        int serviceType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                ? ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC : 0;
         ForegroundInfo info = new ForegroundInfo(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                serviceType);
         try {
             setForegroundAsync(info).get();
         } catch (InterruptedException interrupted) {
@@ -199,14 +199,26 @@ public final class CloudWorker extends Worker {
 
     private ProgressListener progressListener() {
         return new ProgressListener() {
+            private static final long MIN_UPDATE_INTERVAL_MILLIS = 500L;
+            private long lastUpdateAt = -1L;
+            private ProgressListener.Stage lastStage;
+
             @Override
-            public void onProgress(Progress progress) {
+            public synchronized void onProgress(Progress progress) {
+                long now = SystemClock.elapsedRealtime();
+                boolean stageChanged = progress.getStage() != lastStage;
+                boolean terminalPercent = progress.getPercent() >= 100;
+                if (!stageChanged && !terminalPercent && lastUpdateAt >= 0L
+                        && now - lastUpdateAt < MIN_UPDATE_INTERVAL_MILLIS) {
+                    return;
+                }
                 Data data = new Data.Builder()
                         .putInt(KEY_PERCENT, progress.getPercent())
                         .putString(KEY_STAGE, progress.getStage().name())
-                        .putString(KEY_DETAIL, truncate(progress.getCurrentPath(), 300))
                         .build();
                 setProgressAsync(data);
+                lastStage = progress.getStage();
+                lastUpdateAt = now;
             }
         };
     }
@@ -216,41 +228,7 @@ public final class CloudWorker extends Worker {
     }
 
     private Result failure(String message) {
-        return Result.failure(new Data.Builder()
-                .putString(KEY_MESSAGE, truncate(message, 800))
-                .build());
+        return Result.failure(new Data.Builder().putString(KEY_MESSAGE, message).build());
     }
 
-    private static boolean isKnownOperation(String operation) {
-        return OP_TEST.equals(operation)
-                || OP_BACKUP.equals(operation)
-                || OP_LIST.equals(operation)
-                || OP_RESTORE.equals(operation);
-    }
-
-    private static String safeError(Throwable error, ConnectionSettings settings) {
-        if (error instanceof RemoteStoreException) {
-            int status = ((RemoteStoreException) error).getStatusCode();
-            if (status == 401 || status == 403) return "服务器拒绝登录，请检查账号和密码";
-            if (status == 507) return "服务器存储空间不足";
-        }
-        String message = error.getMessage();
-        if (message == null || message.trim().isEmpty()) {
-            message = error.getClass().getSimpleName();
-        }
-        if (settings != null) {
-            message = redact(message, settings.getPassword());
-            message = redact(message, settings.getUsername());
-        }
-        return truncate(message.replace('\r', ' ').replace('\n', ' ').trim(), 800);
-    }
-
-    private static String redact(String message, String secret) {
-        return secret == null || secret.isEmpty() ? message : message.replace(secret, "***");
-    }
-
-    private static String truncate(String value, int maximum) {
-        if (value == null) return "";
-        return value.length() <= maximum ? value : value.substring(0, maximum) + "…";
-    }
 }

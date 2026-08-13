@@ -166,12 +166,13 @@ final class SnapshotFormat {
         return decoded.toString();
     }
 
+    /** Parses exactly one JSON object; Android JSONTokener uses '\0' as its EOF sentinel. */
     private static JSONObject decodeObject(byte[] bytes)
             throws CharacterCodingException, JSONException {
         JSONTokener tokens = new JSONTokener(decodeUtf8(bytes));
         Object value = tokens.nextValue();
-        if (!(value instanceof JSONObject) || tokens.nextClean() != 0) {
-            throw new JSONException("Expected one complete JSON object");
+        if (!(value instanceof JSONObject) || tokens.nextClean() != '\0') {
+            throw new JSONException("Expected exactly one JSON object");
         }
         return (JSONObject) value;
     }

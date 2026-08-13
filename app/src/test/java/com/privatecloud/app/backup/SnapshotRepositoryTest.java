@@ -53,6 +53,20 @@ public final class SnapshotRepositoryTest {
         new SnapshotRepository(remote).loadManifest(PLAN, SNAPSHOT);
     }
 
+    @Test(expected = InvalidSnapshotException.class)
+    public void completeMarkerRejectsTrailingJsonData() throws Exception {
+        FakeRemoteStore remote = committedStore();
+        String path = SnapshotLayout.completePath(PLAN, SNAPSHOT);
+        byte[] original = remote.files.get(path);
+        byte[] suffix = " trailing".getBytes("UTF-8");
+        byte[] damaged = new byte[original.length + suffix.length];
+        System.arraycopy(original, 0, damaged, 0, original.length);
+        System.arraycopy(suffix, 0, damaged, original.length, suffix.length);
+        remote.files.put(path, damaged);
+
+        new SnapshotRepository(remote).loadManifest(PLAN, SNAPSHOT);
+    }
+
     private static FakeRemoteStore committedStore() throws Exception {
         FakeRemoteStore remote = new FakeRemoteStore();
         remote.createDirectories(SnapshotLayout.objectsRoot(PLAN, SNAPSHOT));

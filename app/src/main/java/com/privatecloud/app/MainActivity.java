@@ -68,7 +68,7 @@ public final class MainActivity extends Activity implements BackupDashboardView.
             activeOperation = savedInstanceState.getString(STATE_OPERATION);
             if (workId != null && activeOperation != null) {
                 try {
-                    observeWork(UUID.fromString(workId), activeOperation);
+                    observeWork(UUID.fromString(workId), activeOperation, true);
                     restoredWork = true;
                 } catch (IllegalArgumentException ignored) {
                     activeWorkId = null;
@@ -185,29 +185,41 @@ public final class MainActivity extends Activity implements BackupDashboardView.
             String snapshotId) {
         try {
             ConnectionSettings settings = fromUi(config);
-            settingsRepository.save(settings, localFolder);
-            Data.Builder input = new Data.Builder().putString(CloudWorker.KEY_OPERATION, operation);
-            if (snapshotId != null) input.putString(CloudWorker.KEY_SNAPSHOT_ID, snapshotId);
+            UUID requestId = UUID.randomUUID();
+            String jobKey = requestId.toString();
+            String encryptedSpec = settingsRepository.prepareOperation(
+                    jobKey, settings, localFolder, operation, snapshotId);
+            Data input = new Data.Builder()
+                    .putString(CloudWorker.KEY_ENCRYPTED_SPEC, encryptedSpec)
+                    .build();
             Constraints constraints = new Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build();
             OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(CloudWorker.class)
-                    .setInputData(input.build())
+                    .setId(requestId)
+                    .setInputData(input)
                     .setConstraints(constraints)
                     .addTag(CloudWorker.TAG)
                     .addTag(CloudWorker.TAG + ":" + operation)
                     .build();
             workManager.enqueueUniqueWork(
                     CloudWorker.UNIQUE_WORK_NAME, ExistingWorkPolicy.REPLACE, request);
-            observeWork(request.getId(), operation);
+            observeWork(requestId, operation);
         } catch (GeneralSecurityException failure) {
             dashboard.showError("无法安全保存服务器密码，请重试");
         } catch (IllegalArgumentException invalid) {
             dashboard.showError("服务器配置无效：" + safeMessage(invalid));
+        } catch (RuntimeException unableToEnqueue) {
+            dashboard.showError("无法提交后台任务：" + safeMessage(unableToEnqueue));
         }
     }
 
     private void observeWork(final UUID workId, final String operation) {
+        observeWork(workId, operation, false);
+    }
+
+    private void observeWork(
+            final UUID workId, final String operation, final boolean recoverIfMissing) {
         stopRecoveringWork();
         stopObservingWork();
         activeWorkId = workId;
@@ -217,7 +229,15 @@ public final class MainActivity extends Activity implements BackupDashboardView.
         workObserver = new Observer<WorkInfo>() {
             @Override
             public void onChanged(WorkInfo info) {
-                if (info == null || !workId.equals(activeWorkId)) return;
+                if (!workId.equals(activeWorkId)) return;
+                if (info == null) {
+                    if (!recoverIfMissing) return;
+                    activeWorkId = null;
+                    activeOperation = null;
+                    stopObservingWork();
+                    recoverUniqueWork();
+                    return;
+                }
                 renderWorkInfo(info, operation);
             }
         };
@@ -235,14 +255,13 @@ public final class MainActivity extends Activity implements BackupDashboardView.
             public void onChanged(List<WorkInfo> workInfos) {
                 if (workInfos == null) return;
                 WorkInfo unfinished = findUnfinishedWork(workInfos);
-                stopRecoveringWork();
                 if (unfinished == null) {
                     dashboard.renderIdle();
                     return;
                 }
+                stopRecoveringWork();
                 String operation = operationFromTags(unfinished);
                 observeWork(unfinished.getId(), operation);
-                renderWorkInfo(unfinished, operation);
             }
         };
         recoveryWork.observeForever(recoveryObserver);
@@ -292,11 +311,11 @@ public final class MainActivity extends Activity implements BackupDashboardView.
         if (state == WorkInfo.State.RUNNING) {
             Data progress = info.getProgress();
             int percent = progress.getInt(CloudWorker.KEY_PERCENT, -1);
-            String detail = progress.getString(CloudWorker.KEY_DETAIL);
+            String stage = progress.getString(CloudWorker.KEY_STAGE);
             if (percent >= 0) {
-                dashboard.showProgress(percent, detail);
+                dashboard.showProgress(percent, stageLabel(stage));
             } else {
-                dashboard.showOperation(stageLabel(progress.getString(CloudWorker.KEY_STAGE)), true);
+                dashboard.showOperation(stageLabel(stage), true);
             }
             return;
         }
