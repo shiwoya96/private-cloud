@@ -57,8 +57,8 @@ jobs:
       - name: Verify resolved security dependency
         run: |
           gradle --no-daemon --max-workers=2 --console=plain :app:dependencyInsight --configuration debugRuntimeClasspath --dependency org.bouncycastle:bcprov-jdk18on > dependency-insight.txt
-          grep -Fq 'org.bouncycastle:bcprov-jdk18on:1.84' dependency-insight.txt
-          ! grep -Fq 'org.bouncycastle:bcprov-jdk18on:1.76' dependency-insight.txt
+          first_match="$(grep -m1 -F 'org.bouncycastle:bcprov-jdk18on:' dependency-insight.txt)"
+          test "$first_match" = 'org.bouncycastle:bcprov-jdk18on:1.84'
 
       - name: Verify APK signature
         run: "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
