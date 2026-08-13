@@ -62,7 +62,8 @@ jobs:
           test "$selected" = 'org.bouncycastle:bcprov-jdk18on:1.84'
 
       - name: Verify APK signature
-        run: "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
 
       - name: Write APK checksum
         working-directory: app/build/outputs/apk/debug
