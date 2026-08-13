@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # The main-branch job publishes the verified debug APK as an explicit prerelease.
+  contents: write
 
 concurrency:
   group: android-${{ github.workflow }}-${{ github.ref }}
@@ -90,6 +91,24 @@ jobs:
       - name: Write APK checksum
         working-directory: app/build/outputs/apk/debug
         run: sha256sum app-debug.apk > app-debug.apk.sha256
+
+      - name: Publish v0.1.0 debug prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v0.1.0-debug
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; leaving its immutable assets unchanged."
+          else
+            gh release create "$RELEASE_TAG" \
+              app/build/outputs/apk/debug/app-debug.apk \
+              app/build/outputs/apk/debug/app-debug.apk.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title 'Private Cloud v0.1.0 (debug)' \
+              --notes '测试预发布：支持 WebDAV、SMB、SAF 指定目录、不可变快照备份及恢复。APK 使用 Android debug 密钥签名。' \
+              --prerelease
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7

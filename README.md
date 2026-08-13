@@ -54,6 +54,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## 从 GitHub Actions 下载 APK
 
+当前测试版本也会发布到仓库的 **Releases** 页面；可直接下载 `v0.1.0-debug` 中的
+`app-debug.apk` 和 `app-debug.apk.sha256`。该 Release 与下述 Actions Artifact 都是 debug
+签名测试包。
+
 1. 打开仓库的 **Actions** 页面。
 2. 选择最近一次成功的 **Android CI** 运行。
 3. 在页面底部 **Artifacts** 下载 `private-cloud-debug-apk-<运行编号>-<尝试编号>`。
