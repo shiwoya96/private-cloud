@@ -92,24 +92,6 @@ jobs:
         working-directory: app/build/outputs/apk/debug
         run: sha256sum app-debug.apk > app-debug.apk.sha256
 
-      - name: Publish v0.1.0 debug prerelease
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v0.1.0-debug
-        run: |
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG already exists; leaving its immutable assets unchanged."
-          else
-            gh release create "$RELEASE_TAG" \
-              app/build/outputs/apk/debug/app-debug.apk \
-              app/build/outputs/apk/debug/app-debug.apk.sha256 \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title 'Private Cloud v0.1.0 (debug)' \
-              --notes '测试预发布：支持 WebDAV、SMB、SAF 指定目录、不可变快照备份及恢复。APK 使用 Android debug 密钥签名。' \
-              --prerelease
-
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
@@ -120,6 +102,45 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Publish v0.1.0 debug prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v0.1.0-debug
+        run: |
+          set -o pipefail
+          {
+            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $RELEASE_TAG already exists; leaving its immutable assets unchanged."
+            else
+              gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+                -f tag_name="$RELEASE_TAG" \
+                -f target_commitish="$GITHUB_SHA" \
+                -f name='Private Cloud v0.1.0 (debug)' \
+                -f body='测试预发布：支持 WebDAV、SMB、SAF 指定目录、不可变快照备份及恢复。APK 使用 Android debug 密钥签名。' \
+                -F prerelease=true > release.json
+              gh release upload "$RELEASE_TAG" \
+                app/build/outputs/apk/debug/app-debug.apk \
+                app/build/outputs/apk/debug/app-debug.apk.sha256 \
+                --repo "$GITHUB_REPOSITORY"
+            fi
+          } 2>&1 | tee release-publish.log
+
+      - name: Publish release failure annotation
+        if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          python3 - <<'PY'
+          import os
+
+          path = "release-publish.log"
+          message = "Release command failed without a log"
+          if os.path.isfile(path):
+              with open(path, "r", encoding="utf-8", errors="replace") as stream:
+                  message = stream.read()[-6000:]
+          escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=GitHub prerelease failed::{escaped}")
+          PY
 
       - name: Upload unit-test reports
         if: always()
