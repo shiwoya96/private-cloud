@@ -50,6 +50,13 @@ final class PrefixRemoteStore implements RemoteStore {
     }
 
     @Override
+    public void upload(
+            String remotePath, InputStream source, long contentLength, String contentType,
+            boolean overwrite) throws IOException {
+        delegate.upload(map(remotePath), source, contentLength, contentType, overwrite);
+    }
+
+    @Override
     public void createDirectory(String remotePath) throws IOException {
         String safePath = RemotePaths.normalize(remotePath);
         if (safePath.isEmpty()) {

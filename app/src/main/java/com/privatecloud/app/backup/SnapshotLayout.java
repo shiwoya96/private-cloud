@@ -1,6 +1,8 @@
 package com.privatecloud.app.backup;
 
+import com.privatecloud.app.model.ManifestEntry;
 import com.privatecloud.app.model.SnapshotManifest;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -9,6 +11,7 @@ final class SnapshotLayout {
     static final String APP_ROOT = ".private-cloud/v1";
     static final String MANIFEST_NAME = "manifest.json";
     static final String COMPLETE_NAME = "complete.json";
+    static final String FILES_NAME = "files";
 
     private SnapshotLayout() {}
 
@@ -22,6 +25,27 @@ final class SnapshotLayout {
 
     static String objectsRoot(String planId, String snapshotId) {
         return snapshotRoot(planId, snapshotId) + "/objects";
+    }
+
+    static String filesRoot(String planId, String snapshotId) {
+        return snapshotRoot(planId, snapshotId) + "/" + FILES_NAME;
+    }
+
+    /** Maps a manifest path to the directly browsable files tree used by new snapshots. */
+    static String filePath(String planId, String snapshotId, List<String> pathSegments) {
+        if (pathSegments == null || pathSegments.isEmpty()) {
+            throw new IllegalArgumentException("Snapshot file path must not be empty");
+        }
+        StringBuilder path = new StringBuilder(filesRoot(planId, snapshotId));
+        for (String segment : pathSegments) {
+            ManifestEntry.validatePathSegment(segment);
+            if (segment.indexOf('/') >= 0 || segment.indexOf('\\') >= 0) {
+                throw new IllegalArgumentException(
+                        "Snapshot file names cannot contain path separators");
+            }
+            path.append('/').append(segment);
+        }
+        return path.toString();
     }
 
     static String objectPath(String planId, String snapshotId, String objectId) {

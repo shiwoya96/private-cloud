@@ -207,6 +207,16 @@ public final class WebDavStore implements RemoteStore {
             InputStream source,
             long contentLength,
             boolean overwrite) throws IOException {
+        put(remotePath, source, contentLength, null, overwrite);
+    }
+
+    /** Performs a PUT with caller-supplied media type metadata. */
+    public void put(
+            String remotePath,
+            InputStream source,
+            long contentLength,
+            String contentType,
+            boolean overwrite) throws IOException {
         if (source == null) {
             throw new IllegalArgumentException("source must not be null");
         }
@@ -219,7 +229,8 @@ public final class WebDavStore implements RemoteStore {
             builder.header("If-None-Match", "*");
         }
         Request request = builder
-                .method("PUT", new StreamRequestBody(source, contentLength))
+                .method("PUT", new StreamRequestBody(
+                        source, contentLength, mediaTypeOrOctetStream(contentType)))
                 .build();
         try (Response response = client.newCall(request).execute()) {
             requireSuccess(response, "PUT", safePath);
@@ -233,6 +244,27 @@ public final class WebDavStore implements RemoteStore {
             long contentLength,
             boolean overwrite) throws IOException {
         put(remotePath, source, contentLength, overwrite);
+    }
+
+    @Override
+    public void upload(
+            String remotePath,
+            InputStream source,
+            long contentLength,
+            String contentType,
+            boolean overwrite) throws IOException {
+        put(remotePath, source, contentLength, contentType, overwrite);
+    }
+
+    private static MediaType mediaTypeOrOctetStream(String contentType) {
+        if (contentType == null || contentType.trim().isEmpty()) {
+            return OCTET_STREAM_MEDIA_TYPE;
+        }
+        try {
+            return MediaType.get(contentType);
+        } catch (IllegalArgumentException invalid) {
+            return OCTET_STREAM_MEDIA_TYPE;
+        }
     }
 
     /** Performs MKCOL for one collection. HTTP 405 is accepted only when it already exists. */
@@ -855,15 +887,17 @@ public final class WebDavStore implements RemoteStore {
     private static final class StreamRequestBody extends RequestBody {
         private final InputStream source;
         private final long length;
+        private final MediaType contentType;
 
-        StreamRequestBody(InputStream source, long length) {
+        StreamRequestBody(InputStream source, long length, MediaType contentType) {
             this.source = source;
             this.length = length;
+            this.contentType = contentType;
         }
 
         @Override
         public MediaType contentType() {
-            return OCTET_STREAM_MEDIA_TYPE;
+            return contentType;
         }
 
         @Override

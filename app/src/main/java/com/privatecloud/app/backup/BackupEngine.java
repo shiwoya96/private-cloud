@@ -103,8 +103,11 @@ public final class BackupEngine {
         cancellation.throwIfCancellationRequested();
         long createdAt = Math.max(1L, System.currentTimeMillis());
         String snapshotId = allocateSnapshotId(safePlanId, createdAt, cancellation);
-        String objectsRoot = SnapshotLayout.objectsRoot(safePlanId, snapshotId);
-        store.createDirectories(objectsRoot);
+        boolean directlyBrowsable = encryptionKey == null;
+        String dataRoot = directlyBrowsable
+                ? SnapshotLayout.filesRoot(safePlanId, snapshotId)
+                : SnapshotLayout.objectsRoot(safePlanId, snapshotId);
+        store.createDirectories(dataRoot);
 
         ArrayList<ManifestEntry> entries = new ArrayList<ManifestEntry>(documents.size());
         long completedFiles = 0L;
@@ -113,6 +116,10 @@ public final class BackupEngine {
             cancellation.throwIfCancellationRequested();
             if (document.isDirectory()) {
                 try {
+                    if (directlyBrowsable) {
+                        store.createDirectories(SnapshotLayout.filePath(
+                                safePlanId, snapshotId, document.getPathSegments()));
+                    }
                     entries.add(ManifestEntry.directory(
                             document.getPathSegments(), document.getLastModified()));
                 } catch (IllegalArgumentException invalid) {
@@ -140,6 +147,16 @@ public final class BackupEngine {
             };
 
             String objectId = SnapshotLayout.newObjectId();
+            final String remoteObjectPath;
+            try {
+                remoteObjectPath = directlyBrowsable
+                        ? SnapshotLayout.filePath(
+                                safePlanId, snapshotId, document.getPathSegments())
+                        : SnapshotLayout.objectPath(safePlanId, snapshotId, objectId);
+            } catch (IllegalArgumentException invalid) {
+                throw new IOException("Unsupported source file name: " + displayPath, invalid);
+            }
+            String mimeType = safeMimeType(document.getMimeType());
             TransferStreams.DigestingInputStream digesting =
                     new TransferStreams.DigestingInputStream(
                             safeSource.openForRead(document), cancellation, byteObserver);
@@ -151,9 +168,10 @@ public final class BackupEngine {
             }
             try (java.io.InputStream input = uploadInput) {
                 store.upload(
-                        SnapshotLayout.objectPath(safePlanId, snapshotId, objectId),
+                        remoteObjectPath,
                         input,
                         uploadLength,
+                        directlyBrowsable ? mimeType : null,
                         false);
             }
             long actualSize = digesting.getCount();
@@ -165,8 +183,7 @@ public final class BackupEngine {
             if (metadataChanged(document, refreshed)) {
                 throw new IOException("Source file changed during backup: " + displayPath);
             }
-            RemoteEntry uploaded = store.stat(
-                    SnapshotLayout.objectPath(safePlanId, snapshotId, objectId));
+            RemoteEntry uploaded = store.stat(remoteObjectPath);
             long expectedRemoteSize = encryptionKey == null
                     ? actualSize : EncryptedObjectInputStream.encryptedLength(actualSize);
             if (uploaded.isDirectory()
@@ -182,7 +199,7 @@ public final class BackupEngine {
                         objectId,
                         actualSize,
                         document.getLastModified(),
-                        safeMimeType(document.getMimeType()),
+                        mimeType,
                         sha256));
             } catch (IllegalArgumentException invalid) {
                 throw new IOException("Unsupported source file metadata: " + displayPath, invalid);

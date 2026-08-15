@@ -127,8 +127,11 @@ public final class RestoreEngine {
                         "Manifest file parent was not restored: " + entry.displayPath());
             }
 
-            String remoteObjectPath = SnapshotLayout.objectPath(
-                    safePlanId, safeSnapshotId, entry.getObjectId());
+            String remoteObjectPath = manifest.usesOriginalPaths()
+                    ? SnapshotLayout.filePath(
+                            safePlanId, safeSnapshotId, entry.getPathSegments())
+                    : SnapshotLayout.objectPath(
+                            safePlanId, safeSnapshotId, entry.getObjectId());
             RemoteEntry remoteObject = store.stat(remoteObjectPath);
             long expectedRemoteSize = encrypted
                     ? EncryptedObjectInputStream.encryptedLength(entry.getSize())

@@ -35,6 +35,19 @@ public interface RemoteStore extends Closeable {
             long contentLength,
             boolean overwrite) throws IOException;
 
+    /**
+     * Uploads a file while preserving its media type when the transport supports metadata.
+     * Implementations without media-type metadata may delegate to the legacy upload method.
+     */
+    default void upload(
+            String remotePath,
+            InputStream source,
+            long contentLength,
+            String contentType,
+            boolean overwrite) throws IOException {
+        upload(remotePath, source, contentLength, overwrite);
+    }
+
     /** Creates exactly one directory. The parent must already exist. */
     void createDirectory(String remotePath) throws IOException;
 
