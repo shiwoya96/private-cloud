@@ -91,6 +91,33 @@ public final class SnapshotRepository {
         return loadManifest(planId, snapshotId, CancellationToken.NONE);
     }
 
+    /** Deletes only a validated, committed snapshot owned by the selected plan. */
+    public void deleteCommitted(
+            String planId, String snapshotId, CancellationToken cancellation) throws IOException {
+        String safePlanId = SnapshotManifest.requirePlanId(planId);
+        String safeSnapshotId = SnapshotManifest.requireSnapshotId(snapshotId);
+        CancellationToken safeCancellation = nonNullCancellation(cancellation);
+        loadCommitted(safePlanId, safeSnapshotId, safeCancellation);
+        safeCancellation.throwIfCancellationRequested();
+        store.delete(SnapshotLayout.snapshotRoot(safePlanId, safeSnapshotId));
+    }
+
+    /** Keeps the newest {@code keepCount} committed snapshots and removes older validated ones. */
+    public int prune(
+            String planId, int keepCount, CancellationToken cancellation,
+            ProgressListener progress) throws IOException {
+        if (keepCount < 1 || keepCount > 10_000) {
+            throw new IllegalArgumentException("keepCount must be in 1..10000");
+        }
+        List<SnapshotInfo> snapshots = listCommitted(planId, cancellation, progress);
+        int deleted = 0;
+        for (int index = keepCount; index < snapshots.size(); index++) {
+            deleteCommitted(planId, snapshots.get(index).getSnapshotId(), cancellation);
+            deleted++;
+        }
+        return deleted;
+    }
+
     CommittedSnapshot loadCommitted(
             String planId, String snapshotId, CancellationToken cancellation) throws IOException {
         if (cancellation == null) {

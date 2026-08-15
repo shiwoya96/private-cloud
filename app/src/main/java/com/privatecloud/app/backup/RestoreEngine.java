@@ -30,6 +30,22 @@ public final class RestoreEngine {
             SafTree destination,
             CancellationToken cancellationToken,
             ProgressListener progressListener) throws IOException {
+        return restore(planId, snapshotId, destination, "", cancellationToken, progressListener);
+    }
+
+    public RestoreResult restore(
+            String planId, String snapshotId, SafTree destination, String selectionPath,
+            CancellationToken cancellationToken, ProgressListener progressListener)
+            throws IOException {
+        return restore(
+                planId, snapshotId, destination, selectionPath, "",
+                cancellationToken, progressListener);
+    }
+
+    public RestoreResult restore(
+            String planId, String snapshotId, SafTree destination, String selectionPath,
+            String recoveryKey, CancellationToken cancellationToken,
+            ProgressListener progressListener) throws IOException {
         String safePlanId = SnapshotManifest.requirePlanId(planId);
         String safeSnapshotId = SnapshotManifest.requireSnapshotId(snapshotId);
         SafTree safeDestination = Objects.requireNonNull(destination, "destination");
@@ -50,6 +66,19 @@ public final class RestoreEngine {
         SnapshotRepository.CommittedSnapshot committed = new SnapshotRepository(store)
                 .loadCommitted(safePlanId, safeSnapshotId, cancellation);
         SnapshotManifest manifest = committed.manifest;
+        boolean encrypted = !manifest.getEncryptionFingerprint().isEmpty();
+        final byte[] decryptionKey;
+        if (encrypted) {
+            if (recoveryKey == null || recoveryKey.isEmpty()
+                    || !manifest.getEncryptionFingerprint().equals(
+                            RecoveryKeyCrypto.fingerprint(recoveryKey))) {
+                throw new InvalidSnapshotException("恢复密钥与该快照不匹配");
+            }
+            decryptionKey = RecoveryKeyCrypto.parseRecoveryKey(recoveryKey);
+        } else {
+            decryptionKey = null;
+        }
+        List<ManifestEntry> selectedEntries = selectEntries(manifest, selectionPath);
 
         cancellation.throwIfCancellationRequested();
         String restoreDirectoryName = "PrivateCloud-restore-" + safeSnapshotId;
@@ -60,7 +89,7 @@ public final class RestoreEngine {
         Map<String, SafDocument> directories = new HashMap<String, SafDocument>();
         directories.put("", restoreRoot);
 
-        for (ManifestEntry entry : manifest.getEntries()) {
+        for (ManifestEntry entry : selectedEntries) {
             cancellation.throwIfCancellationRequested();
             if (!entry.isDirectory()) {
                 continue;
@@ -87,7 +116,7 @@ public final class RestoreEngine {
 
         long completedFiles = 0L;
         long completedBytes = 0L;
-        for (ManifestEntry entry : manifest.getEntries()) {
+        for (ManifestEntry entry : selectedEntries) {
             if (entry.isDirectory()) {
                 continue;
             }
@@ -101,9 +130,12 @@ public final class RestoreEngine {
             String remoteObjectPath = SnapshotLayout.objectPath(
                     safePlanId, safeSnapshotId, entry.getObjectId());
             RemoteEntry remoteObject = store.stat(remoteObjectPath);
+            long expectedRemoteSize = encrypted
+                    ? EncryptedObjectInputStream.encryptedLength(entry.getSize())
+                    : entry.getSize();
             if (remoteObject.isDirectory()
                     || (remoteObject.getSize() >= 0L
-                            && remoteObject.getSize() != entry.getSize())) {
+                            && remoteObject.getSize() != expectedRemoteSize)) {
                 throw new InvalidSnapshotException(
                         "Snapshot object metadata mismatch: " + entry.displayPath());
             }
@@ -139,7 +171,15 @@ public final class RestoreEngine {
                                 entry.getSha256(),
                                 cancellation,
                                 observer)) {
-                    store.download(remoteObjectPath, verifying);
+                    if (encrypted) {
+                        DecryptingObjectOutputStream decrypting =
+                                new DecryptingObjectOutputStream(
+                                        verifying, decryptionKey, entry.getObjectId());
+                        store.download(remoteObjectPath, decrypting);
+                        decrypting.finish();
+                    } else {
+                        store.download(remoteObjectPath, verifying);
+                    }
                     cancellation.throwIfCancellationRequested();
                     verifying.verify();
                     verifying.flush();
@@ -183,6 +223,25 @@ public final class RestoreEngine {
                 restoreRoot.getDisplayName(),
                 completedFiles,
                 completedBytes);
+    }
+
+    private static List<ManifestEntry> selectEntries(
+            SnapshotManifest manifest, String rawSelection) throws InvalidSnapshotException {
+        String selection = rawSelection == null ? "" : rawSelection;
+        if (selection.isEmpty()) return manifest.getEntries();
+        java.util.ArrayList<ManifestEntry> selected =
+                new java.util.ArrayList<ManifestEntry>();
+        boolean exact = false;
+        for (ManifestEntry entry : manifest.getEntries()) {
+            String path = entry.pathKey();
+            if (path.equals(selection)) exact = true;
+            if (path.equals(selection) || path.startsWith(selection + "/")
+                    || (entry.isDirectory() && selection.startsWith(path + "/"))) {
+                selected.add(entry);
+            }
+        }
+        if (!exact) throw new InvalidSnapshotException("Selected snapshot path does not exist");
+        return selected;
     }
 
     public RestoreResult restore(

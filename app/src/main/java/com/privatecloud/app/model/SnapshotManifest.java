@@ -24,7 +24,7 @@ import org.json.JSONTokener;
 
 /** Versioned, validated description of one complete local directory snapshot. */
 public final class SnapshotManifest {
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
     public static final int MAX_ENTRIES = 100_000;
     public static final int MAX_JSON_BYTES = 16 * 1024 * 1024;
     /** Stable remote namespace for the MVP's single active backup plan. */
@@ -41,6 +41,7 @@ public final class SnapshotManifest {
     private final long fileCount;
     private final long directoryCount;
     private final long totalBytes;
+    private final String encryptionFingerprint;
 
     public SnapshotManifest(
             String planId,
@@ -48,6 +49,12 @@ public final class SnapshotManifest {
             long createdAt,
             String sourceName,
             List<ManifestEntry> entries) {
+        this(planId, snapshotId, createdAt, sourceName, entries, "");
+    }
+
+    public SnapshotManifest(
+            String planId, String snapshotId, long createdAt, String sourceName,
+            List<ManifestEntry> entries, String encryptionFingerprint) {
         this.planId = requirePlanId(planId);
         this.snapshotId = requireSnapshotId(snapshotId);
         if (createdAt <= 0L) {
@@ -55,6 +62,12 @@ public final class SnapshotManifest {
         }
         this.createdAt = createdAt;
         this.sourceName = requireSourceName(sourceName);
+        this.encryptionFingerprint = encryptionFingerprint == null
+                ? "" : encryptionFingerprint;
+        if (!this.encryptionFingerprint.isEmpty()
+                && !this.encryptionFingerprint.matches("[0-9A-F]{12}")) {
+            throw new IllegalArgumentException("Invalid encryption fingerprint");
+        }
         if (entries == null) {
             throw new IllegalArgumentException("entries must not be null");
         }
@@ -117,6 +130,7 @@ public final class SnapshotManifest {
     public long getTotalBytes() {
         return totalBytes;
     }
+    public String getEncryptionFingerprint() { return encryptionFingerprint; }
 
     /** Serializes using a stable field and entry order. The returned bytes are the hashed payload. */
     public byte[] toJsonBytes() throws IOException {
@@ -127,6 +141,7 @@ public final class SnapshotManifest {
             root.put("snapshotId", snapshotId);
             root.put("createdAt", createdAt);
             root.put("sourceName", sourceName);
+            root.put("encryptionFingerprint", encryptionFingerprint);
             JSONArray encodedEntries = new JSONArray();
             for (ManifestEntry entry : entries) {
                 JSONObject encoded = new JSONObject();
@@ -168,13 +183,15 @@ public final class SnapshotManifest {
         try {
             JSONObject root = decodeObject(bytes);
             long schema = requireLong(root, "schema");
-            if (schema != SCHEMA_VERSION) {
+            if (schema != 1 && schema != SCHEMA_VERSION) {
                 throw new IOException("Unsupported snapshot manifest schema: " + schema);
             }
             String planId = requireString(root, "planId");
             String snapshotId = requireString(root, "snapshotId");
             long createdAt = requireLong(root, "createdAt");
             String sourceName = requireString(root, "sourceName");
+            String encryptionFingerprint = schema >= 2
+                    ? requireString(root, "encryptionFingerprint") : "";
             JSONArray encodedEntries = root.getJSONArray("entries");
             if (encodedEntries.length() > MAX_ENTRIES) {
                 throw new IOException("Snapshot contains too many entries");
@@ -225,7 +242,8 @@ public final class SnapshotManifest {
                     throw new IOException("Unknown snapshot entry type: " + type);
                 }
             }
-            return new SnapshotManifest(planId, snapshotId, createdAt, sourceName, entries);
+            return new SnapshotManifest(
+                    planId, snapshotId, createdAt, sourceName, entries, encryptionFingerprint);
         } catch (JSONException malformed) {
             throw new IOException("Invalid snapshot manifest JSON", malformed);
         } catch (IllegalArgumentException invalid) {

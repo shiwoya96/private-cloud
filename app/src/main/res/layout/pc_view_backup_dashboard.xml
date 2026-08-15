@@ -54,6 +54,21 @@
             style="@style/PcFieldLabel"
             android:text="@string/pc_protocol_label" />
 
+        <EditText
+            android:id="@+id/pc_plan_id"
+            style="@style/PcEditText"
+            android:hint="@string/pc_plan_id_hint"
+            android:inputType="text"
+            android:maxLength="64"
+            android:text="default-plan" />
+
+        <TextView
+            android:id="@+id/pc_saved_plans"
+            style="@style/PcValueText"
+            android:layout_marginTop="@dimen/pc_space_4"
+            android:text="@string/pc_saved_plans_empty"
+            android:textIsSelectable="true" />
+
         <RadioGroup
             android:id="@+id/pc_protocol_group"
             android:layout_width="match_parent"
@@ -167,6 +182,30 @@
             android:maxLines="1" />
 
         <Button
+            android:id="@+id/pc_save_configuration"
+            style="@style/PcPrimaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_save_configuration" />
+
+        <Button
+            android:id="@+id/pc_load_plan"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_load_plan" />
+
+        <Button
+            android:id="@+id/pc_delete_plan"
+            style="@style/PcDangerButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_delete_plan" />
+
+        <Button
+            android:id="@+id/pc_clear_local"
+            style="@style/PcDangerButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_clear_local" />
+
+        <Button
             android:id="@+id/pc_test_connection"
             style="@style/PcSecondaryButton"
             android:layout_marginTop="@dimen/pc_space_8"
@@ -203,6 +242,79 @@
             android:layout_marginTop="@dimen/pc_space_8"
             android:enabled="false"
             android:text="@string/pc_action_backup_now" />
+
+        <EditText
+            android:id="@+id/pc_exclusions"
+            style="@style/PcEditText"
+            android:hint="@string/pc_exclusions_hint"
+            android:inputType="textMultiLine"
+            android:maxLength="1024"
+            android:maxLines="4" />
+
+        <CheckBox
+            android:id="@+id/pc_encryption_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pc_encryption_enabled" />
+
+        <EditText
+            android:id="@+id/pc_recovery_key"
+            style="@style/PcEditText"
+            android:enabled="false"
+            android:hint="@string/pc_recovery_key_hint"
+            android:inputType="textPassword"
+            android:maxLength="43"
+            android:saveEnabled="false" />
+
+        <Button
+            android:id="@+id/pc_generate_recovery_key"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_generate_key" />
+
+        <TextView
+            style="@style/PcFieldLabel"
+            android:layout_marginTop="@dimen/pc_space_16"
+            android:text="@string/pc_schedule_title" />
+
+        <CheckBox
+            android:id="@+id/pc_schedule_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pc_schedule_enabled" />
+
+        <EditText
+            android:id="@+id/pc_schedule_interval"
+            style="@style/PcEditText"
+            android:hint="@string/pc_schedule_interval_hint"
+            android:inputType="number"
+            android:maxLength="3"
+            android:text="24" />
+
+        <CheckBox
+            android:id="@+id/pc_schedule_wifi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/pc_schedule_wifi" />
+
+        <CheckBox
+            android:id="@+id/pc_schedule_charging"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pc_schedule_charging" />
+
+        <Button
+            android:id="@+id/pc_save_schedule"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_save_schedule" />
+
+        <TextView
+            android:id="@+id/pc_backup_history"
+            style="@style/PcValueText"
+            android:layout_marginTop="@dimen/pc_space_12"
+            android:text="@string/pc_history_empty" />
     </LinearLayout>
 
     <LinearLayout
@@ -237,12 +349,54 @@
             android:orientation="vertical"
             android:visibility="gone" />
 
+        <EditText
+            android:id="@+id/pc_restore_path"
+            style="@style/PcEditText"
+            android:hint="@string/pc_restore_path_hint"
+            android:inputType="text"
+            android:maxLines="1" />
+
+        <Button
+            android:id="@+id/pc_inspect_snapshot"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:enabled="false"
+            android:text="@string/pc_action_inspect_snapshot" />
+
+        <TextView
+            android:id="@+id/pc_snapshot_contents"
+            style="@style/PcValueText"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_snapshot_contents_empty"
+            android:textIsSelectable="true" />
+
         <Button
             android:id="@+id/pc_restore_snapshot"
             style="@style/PcDangerButton"
             android:layout_marginTop="@dimen/pc_space_8"
             android:enabled="false"
             android:text="@string/pc_action_restore_selected" />
+
+        <Button
+            android:id="@+id/pc_delete_snapshot"
+            style="@style/PcDangerButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:enabled="false"
+            android:text="@string/pc_action_delete_snapshot" />
+
+        <EditText
+            android:id="@+id/pc_retention_count"
+            style="@style/PcEditText"
+            android:hint="@string/pc_retention_hint"
+            android:inputType="number"
+            android:maxLength="4"
+            android:text="10" />
+
+        <Button
+            android:id="@+id/pc_apply_retention"
+            style="@style/PcSecondaryButton"
+            android:layout_marginTop="@dimen/pc_space_8"
+            android:text="@string/pc_action_apply_retention" />
     </LinearLayout>
 
     <LinearLayout

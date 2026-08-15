@@ -8,6 +8,11 @@
 
     <string name="pc_server_section_title">1. 服务器配置</string>
     <string name="pc_protocol_label">连接方式</string>
+    <string name="pc_plan_id_hint">方案标识，例如 photos-nas</string>
+    <string name="pc_saved_plans_empty">尚无已保存方案</string>
+    <string name="pc_action_load_plan">加载方案</string>
+    <string name="pc_action_delete_plan">删除当前方案</string>
+    <string name="pc_action_clear_local">清除所有本地配置与授权</string>
     <string name="pc_protocol_webdav">WebDAV</string>
     <string name="pc_protocol_smb">SMB</string>
     <string name="pc_hint_webdav_url">服务器地址，例如 https://cloud.example.com/dav</string>
@@ -20,6 +25,7 @@
     <string name="pc_hint_password">密码（匿名访问可留空）</string>
     <string name="pc_hint_webdav_remote_path">远端目录（可选），例如 phone-backups</string>
     <string name="pc_hint_smb_remote_path">共享内目录（可选），例如 phone-backups</string>
+    <string name="pc_action_save_configuration">保存配置</string>
     <string name="pc_action_test_connection">测试连接</string>
 
     <string name="pc_local_section_title">2. 手机目录与备份</string>
@@ -27,6 +33,17 @@
     <string name="pc_folder_not_selected">尚未选择手机目录</string>
     <string name="pc_action_choose_folder">选择手机目录</string>
     <string name="pc_action_backup_now">立即备份</string>
+    <string name="pc_exclusions_hint">排除规则，例如 Cache 或 *.tmp（逗号或换行分隔）</string>
+    <string name="pc_encryption_enabled">启用端到端加密</string>
+    <string name="pc_recovery_key_hint">恢复密钥（请离线安全保存）</string>
+    <string name="pc_action_generate_key">生成新的恢复密钥</string>
+    <string name="pc_schedule_title">自动备份</string>
+    <string name="pc_schedule_enabled">启用定时自动备份</string>
+    <string name="pc_schedule_wifi">仅使用 Wi-Fi 或非计量网络</string>
+    <string name="pc_schedule_charging">仅在充电时执行</string>
+    <string name="pc_schedule_interval_hint">备份间隔（小时，最少 1）</string>
+    <string name="pc_action_save_schedule">保存自动备份设置</string>
+    <string name="pc_history_empty">尚无备份或恢复记录</string>
     <string name="pc_a11y_selected_folder">已选择目录：%1$s</string>
 
     <string name="pc_restore_section_title">3. 从备份恢复</string>
@@ -35,6 +52,12 @@
     <string name="pc_snapshot_empty">尚未读取远端快照</string>
     <string name="pc_snapshot_label">%1$s\n%2$s</string>
     <string name="pc_action_restore_selected">恢复所选快照</string>
+    <string name="pc_action_inspect_snapshot">查看快照内文件</string>
+    <string name="pc_snapshot_contents_empty">选择快照后可查看文件路径，用于单文件或子目录恢复。</string>
+    <string name="pc_restore_path_hint">仅恢复文件或子目录（留空恢复整个快照）</string>
+    <string name="pc_action_delete_snapshot">删除所选快照</string>
+    <string name="pc_retention_hint">保留最新快照数量</string>
+    <string name="pc_action_apply_retention">立即清理旧快照</string>
 
     <string name="pc_operation_section_title">任务状态</string>
     <string name="pc_status_idle">等待操作</string>

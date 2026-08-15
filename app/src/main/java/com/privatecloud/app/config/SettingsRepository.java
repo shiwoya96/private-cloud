@@ -8,6 +8,9 @@ import com.privatecloud.app.model.SnapshotManifest;
 
 import java.security.GeneralSecurityException;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /** Persists one encrypted active configuration and creates encrypted WorkRequest snapshots. */
 public final class SettingsRepository {
@@ -16,6 +19,8 @@ public final class SettingsRepository {
     private static final String PREFS = "private_cloud_settings_v1";
     private static final String ACTIVE_ENVELOPE = "active_configuration_envelope_v2";
     private static final String ACTIVE_AAD = "active-configuration|schema=2";
+    private static final String PLAN_PREFIX = "saved_plan.";
+    private static final String RECOVERY_PREFIX = "recovery_key.";
     private static final String LEGACY_PASSWORD_NAME = "active_connection_password";
     private static final String LEGACY_PASSWORD_CIPHERTEXT = "password_ciphertext";
     private static final String LEGACY_JOB_PREFIX = "job.";
@@ -62,15 +67,50 @@ public final class SettingsRepository {
             Uri treeUri,
             String operation,
             String snapshotId) throws GeneralSecurityException {
+        return prepareOperation(rawJobKey, settings, treeUri, operation, snapshotId, "");
+    }
+
+    public String prepareOperation(
+            String rawJobKey, ConnectionSettings settings, Uri treeUri,
+            String operation, String snapshotId, String selectionPath)
+            throws GeneralSecurityException {
+        return prepareOperation(
+                rawJobKey, settings, treeUri, operation, snapshotId, selectionPath, "");
+    }
+
+    public String prepareOperation(
+            String rawJobKey, ConnectionSettings settings, Uri treeUri,
+            String operation, String snapshotId, String selectionPath, String exclusions)
+            throws GeneralSecurityException {
+        return prepareOperation(
+                rawJobKey, settings, treeUri, operation, snapshotId, selectionPath,
+                exclusions, "");
+    }
+
+    public String prepareOperation(
+            String rawJobKey, ConnectionSettings settings, Uri treeUri,
+            String operation, String snapshotId, String selectionPath, String exclusions,
+            String recoveryKey) throws GeneralSecurityException {
+        return prepareOperation(rawJobKey, settings, treeUri, operation, snapshotId,
+                selectionPath, exclusions, recoveryKey, 10);
+    }
+
+    public String prepareOperation(
+            String rawJobKey, ConnectionSettings settings, Uri treeUri,
+            String operation, String snapshotId, String selectionPath, String exclusions,
+            String recoveryKey, int retentionCount) throws GeneralSecurityException {
         synchronized (STORAGE_LOCK) {
             String jobKey = JobKey.requireCanonical(rawJobKey);
             StoredConfiguration configuration = new StoredConfiguration(
                     settings, uriString(treeUri));
             String activeEnvelope = vault.encrypt(ACTIVE_AAD, configuration.toJson());
+            String planEnvelope = vault.encrypt(
+                    planAad(settings.getPlanId()), configuration.toJson());
             OperationSpec spec;
             try {
                 spec = new OperationSpec(
-                        operation, snapshotId, settings, configuration.getTreeUri());
+                        operation, snapshotId, settings, configuration.getTreeUri(),
+                        selectionPath, exclusions, recoveryKey, retentionCount);
                 OperationSpec.validateSemantics(spec);
             } catch (IllegalArgumentException invalid) {
                 throw new IllegalArgumentException("Invalid background task configuration", invalid);
@@ -79,7 +119,8 @@ public final class SettingsRepository {
             WorkEnvelopePolicy.requireFits(workEnvelope);
 
             SharedPreferences.Editor editor = values.edit()
-                    .putString(ACTIVE_ENVELOPE, activeEnvelope);
+                    .putString(ACTIVE_ENVELOPE, activeEnvelope)
+                    .putString(PLAN_PREFIX + settings.getPlanId(), planEnvelope);
             removeLegacyValues(editor, values.getAll());
             commitOrThrow(editor, "Unable to save active configuration");
             vault.removeLegacyCiphertext(LEGACY_PASSWORD_NAME);
@@ -130,7 +171,78 @@ public final class SettingsRepository {
     }
 
     public String getOrCreatePlanId() {
-        return SnapshotManifest.DEFAULT_PLAN_ID;
+        try {
+            return load().getPlanId();
+        } catch (GeneralSecurityException | IllegalArgumentException ignored) {
+            return SnapshotManifest.DEFAULT_PLAN_ID;
+        }
+    }
+
+    public List<String> listPlanIds() {
+        ArrayList<String> ids = new ArrayList<String>();
+        for (String key : values.getAll().keySet()) {
+            if (key.startsWith(PLAN_PREFIX)) ids.add(key.substring(PLAN_PREFIX.length()));
+        }
+        Collections.sort(ids);
+        return Collections.unmodifiableList(ids);
+    }
+
+    public ConnectionSettings loadPlan(String planId) throws GeneralSecurityException {
+        synchronized (STORAGE_LOCK) { return loadPlanConfiguration(planId).getSettings(); }
+    }
+
+    public Uri loadPlanTreeUri(String planId) throws GeneralSecurityException {
+        synchronized (STORAGE_LOCK) {
+            String raw = loadPlanConfiguration(planId).getTreeUri();
+            return raw.isEmpty() ? null : Uri.parse(raw);
+        }
+    }
+
+    public void deletePlan(String planId) throws GeneralSecurityException {
+        String safeId = SnapshotManifest.requirePlanId(planId);
+        SharedPreferences.Editor editor = values.edit().remove(PLAN_PREFIX + safeId)
+                .remove(RECOVERY_PREFIX + safeId);
+        if (loadStoredConfiguration().getSettings().getPlanId().equals(safeId)) {
+            editor.remove(ACTIVE_ENVELOPE);
+        }
+        if (!editor.commit()) {
+            throw new GeneralSecurityException("Unable to delete plan");
+        }
+    }
+
+    public void saveRecoveryKey(String planId, String recoveryKey)
+            throws GeneralSecurityException {
+        String safeId = SnapshotManifest.requirePlanId(planId);
+        String key = recoveryKey == null ? "" : recoveryKey.trim();
+        if (!key.isEmpty()) com.privatecloud.app.backup.RecoveryKeyCrypto.parseRecoveryKey(key);
+        String encrypted = vault.encrypt(planAad(safeId) + "|recovery", key);
+        commitOrThrow(values.edit().putString(RECOVERY_PREFIX + safeId, encrypted),
+                "Unable to save recovery key");
+    }
+
+    public String loadRecoveryKey(String planId) throws GeneralSecurityException {
+        String safeId = SnapshotManifest.requirePlanId(planId);
+        String encrypted = values.getString(RECOVERY_PREFIX + safeId, null);
+        return encrypted == null ? "" : vault.decrypt(planAad(safeId) + "|recovery", encrypted);
+    }
+
+    public void clearAll() throws GeneralSecurityException {
+        if (!values.edit().clear().commit()) {
+            throw new GeneralSecurityException("Unable to clear settings");
+        }
+        vault.removeLegacyCiphertext(LEGACY_PASSWORD_NAME);
+    }
+
+    private StoredConfiguration loadPlanConfiguration(String planId)
+            throws GeneralSecurityException {
+        String safeId = SnapshotManifest.requirePlanId(planId);
+        String envelope = values.getString(PLAN_PREFIX + safeId, null);
+        if (envelope == null) throw new GeneralSecurityException("Backup plan does not exist");
+        try {
+            return StoredConfiguration.fromJson(vault.decrypt(planAad(safeId), envelope));
+        } catch (IllegalArgumentException damaged) {
+            throw new GeneralSecurityException("Saved backup plan is damaged", damaged);
+        }
     }
 
     private StoredConfiguration loadStoredConfiguration() throws GeneralSecurityException {
@@ -181,10 +293,18 @@ public final class SettingsRepository {
     private void persistActive(StoredConfiguration configuration)
             throws GeneralSecurityException {
         String envelope = vault.encrypt(ACTIVE_AAD, configuration.toJson());
-        SharedPreferences.Editor editor = values.edit().putString(ACTIVE_ENVELOPE, envelope);
+        String planId = configuration.getSettings().getPlanId();
+        String planEnvelope = vault.encrypt(planAad(planId), configuration.toJson());
+        SharedPreferences.Editor editor = values.edit()
+                .putString(ACTIVE_ENVELOPE, envelope)
+                .putString(PLAN_PREFIX + planId, planEnvelope);
         removeLegacyValues(editor, values.getAll());
         commitOrThrow(editor, "Unable to save settings");
         vault.removeLegacyCiphertext(LEGACY_PASSWORD_NAME);
+    }
+
+    private static String planAad(String planId) {
+        return "saved-plan|schema=1|id=" + SnapshotManifest.requirePlanId(planId);
     }
 
     private static StoredConfiguration emptyConfiguration() {

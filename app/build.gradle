@@ -12,11 +12,31 @@ android {
         applicationId 'com.privatecloud.app'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 2
+        versionName '0.2.0'
         // The crypto, SMB, HTTP and WorkManager graph can exceed one DEX file. API 26 has
         // platform multidex support, so no legacy multidex runtime is needed.
         multiDexEnabled true
+    }
+
+    def releaseStoreFile = System.getenv('PRIVATE_CLOUD_KEYSTORE_FILE')
+    def releaseStorePassword = System.getenv('PRIVATE_CLOUD_KEYSTORE_PASSWORD')
+    def releaseKeyAlias = System.getenv('PRIVATE_CLOUD_KEY_ALIAS')
+    def releaseKeyPassword = System.getenv('PRIVATE_CLOUD_KEY_PASSWORD')
+    def releaseSigningAvailable = releaseStoreFile && releaseStorePassword
+            && releaseKeyAlias && releaseKeyPassword
+
+    signingConfigs {
+        if (releaseSigningAvailable) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
     }
 
     buildTypes {
@@ -27,6 +47,7 @@ android {
             minifyEnabled false
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (releaseSigningAvailable) signingConfig signingConfigs.release
         }
     }
 

@@ -21,6 +21,9 @@ public final class PrefixRemoteStoreTest {
         store.createDirectories(".private-cloud/v1");
         assertEquals("phones/pixel/.private-cloud/v1", delegate.lastPath);
 
+        store.delete(".private-cloud/v1/old");
+        assertEquals("phones/pixel/.private-cloud/v1/old", delegate.lastPath);
+
         delegate.entry = new RemoteEntry(
                 "phones/pixel/.private-cloud", ".private-cloud", true, 0L, 0L, null);
         RemoteEntry mapped = store.stat(".private-cloud");
@@ -54,6 +57,7 @@ public final class PrefixRemoteStoreTest {
         }
         @Override public void createDirectory(String path) { lastPath = path; }
         @Override public void createDirectories(String path) { lastPath = path; }
+        @Override public void delete(String path) { lastPath = path; }
         @Override public void close() {}
     }
 }

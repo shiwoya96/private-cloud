@@ -7,6 +7,7 @@ import com.privatecloud.app.model.SnapshotInfo;
 import com.privatecloud.app.model.SnapshotManifest;
 import com.privatecloud.app.remote.RemoteEntry;
 import com.privatecloud.app.remote.RemoteStore;
+import com.privatecloud.app.config.ExclusionRules;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -26,12 +27,29 @@ public final class BackupEngine {
             SafTree source,
             CancellationToken cancellationToken,
             ProgressListener progressListener) throws IOException {
+        return backup(
+                planId, source, new ExclusionRules(""), "", cancellationToken, progressListener);
+    }
+
+    public SnapshotInfo backup(
+            String planId, SafTree source, ExclusionRules exclusions,
+            CancellationToken cancellationToken, ProgressListener progressListener)
+            throws IOException {
+        return backup(planId, source, exclusions, "", cancellationToken, progressListener);
+    }
+
+    public SnapshotInfo backup(
+            String planId, SafTree source, ExclusionRules exclusions, String recoveryKey,
+            CancellationToken cancellationToken, ProgressListener progressListener)
+            throws IOException {
         final String safePlanId = SnapshotManifest.requirePlanId(planId);
         final SafTree safeSource = Objects.requireNonNull(source, "source");
         final CancellationToken cancellation = cancellationToken == null
                 ? CancellationToken.NONE : cancellationToken;
         final ProgressListener progress = progressListener == null
                 ? ProgressListener.NONE : progressListener;
+        final byte[] encryptionKey = recoveryKey == null || recoveryKey.isEmpty()
+                ? null : RecoveryKeyCrypto.parseRecoveryKey(recoveryKey);
 
         safeSource.requirePersistedReadPermission();
         final SafDocument root = safeSource.getRootDocument();
@@ -40,7 +58,7 @@ public final class BackupEngine {
         }
         progress.onProgress(progress(
                 ProgressListener.Stage.SCANNING, 0L, -1L, 0L, -1L, null));
-        List<SafDocument> documents = safeSource.scan(
+        List<SafDocument> scannedDocuments = safeSource.scan(
                 cancellation,
                 new SafTree.ScanObserver() {
                     @Override
@@ -56,6 +74,14 @@ public final class BackupEngine {
                                 entry.displayPath()));
                     }
                 });
+        ArrayList<SafDocument> filteredDocuments = new ArrayList<SafDocument>();
+        ExclusionRules safeExclusions = exclusions == null ? new ExclusionRules("") : exclusions;
+        for (SafDocument document : scannedDocuments) {
+            if (!safeExclusions.excludes(document.displayPath(), document.isDirectory())) {
+                filteredDocuments.add(document);
+            }
+        }
+        List<SafDocument> documents = filteredDocuments;
         safeSource.refreshRoot(root);
 
         long totalFiles = 0L;
@@ -117,11 +143,17 @@ public final class BackupEngine {
             TransferStreams.DigestingInputStream digesting =
                     new TransferStreams.DigestingInputStream(
                             safeSource.openForRead(document), cancellation, byteObserver);
-            try (TransferStreams.DigestingInputStream input = digesting) {
+            java.io.InputStream uploadInput = digesting;
+            long uploadLength = document.getSize();
+            if (encryptionKey != null) {
+                uploadInput = new EncryptedObjectInputStream(digesting, encryptionKey, objectId);
+                uploadLength = EncryptedObjectInputStream.encryptedLength(document.getSize());
+            }
+            try (java.io.InputStream input = uploadInput) {
                 store.upload(
                         SnapshotLayout.objectPath(safePlanId, snapshotId, objectId),
                         input,
-                        document.getSize(),
+                        uploadLength,
                         false);
             }
             long actualSize = digesting.getCount();
@@ -135,8 +167,11 @@ public final class BackupEngine {
             }
             RemoteEntry uploaded = store.stat(
                     SnapshotLayout.objectPath(safePlanId, snapshotId, objectId));
+            long expectedRemoteSize = encryptionKey == null
+                    ? actualSize : EncryptedObjectInputStream.encryptedLength(actualSize);
             if (uploaded.isDirectory()
-                    || (uploaded.getSize() >= 0L && uploaded.getSize() != actualSize)) {
+                    || (uploaded.getSize() >= 0L
+                            && uploaded.getSize() != expectedRemoteSize)) {
                 throw new IOException(
                         "Remote store did not persist the complete object: " + displayPath);
             }
@@ -172,7 +207,8 @@ public final class BackupEngine {
                     snapshotId,
                     createdAt,
                     safeSourceName(root.getDisplayName()),
-                    entries);
+                    entries,
+                    encryptionKey == null ? "" : RecoveryKeyCrypto.fingerprint(recoveryKey));
         } catch (IllegalArgumentException invalid) {
             throw new IOException("Unable to create a valid snapshot manifest", invalid);
         }

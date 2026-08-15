@@ -65,6 +65,13 @@ final class PrefixRemoteStore implements RemoteStore {
     }
 
     @Override
+    public void delete(String remotePath) throws IOException {
+        String safePath = RemotePaths.normalize(remotePath);
+        if (safePath.isEmpty()) throw new IOException("Refusing to delete configured remote root");
+        delegate.delete(map(safePath));
+    }
+
+    @Override
     public void close() throws IOException {
         delegate.close();
     }

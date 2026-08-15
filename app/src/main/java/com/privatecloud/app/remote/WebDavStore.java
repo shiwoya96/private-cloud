@@ -277,6 +277,17 @@ public final class WebDavStore implements RemoteStore {
         }
     }
 
+    @Override
+    public void delete(String remotePath) throws IOException {
+        String safePath = RemotePaths.normalize(remotePath);
+        if (safePath.isEmpty()) throw new IOException("Refusing to delete WebDAV root");
+        boolean directory = stat(safePath).isDirectory();
+        Request request = requestBuilder(safePath, directory).method("DELETE", null).build();
+        try (Response response = client.newCall(request).execute()) {
+            requireSuccess(response, "DELETE", safePath);
+        }
+    }
+
     /** Performs PROPFIND with Depth 0 or 1 and parses a DAV multistatus response. */
     public List<RemoteEntry> propfind(String remotePath, int depth) throws IOException {
         if (depth != 0 && depth != 1) {

@@ -1,6 +1,7 @@
 package com.privatecloud.app.ui;
 
 import android.content.Context;
+import android.app.AlertDialog;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -9,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
@@ -17,6 +19,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.privatecloud.app.R;
+import com.privatecloud.app.backup.RecoveryKeyCrypto;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -168,19 +171,39 @@ public final class BackupDashboardView extends ScrollView {
     public interface Listener {
         void onChooseLocalFolder();
 
+        void onSaveConfiguration(ServerConfig config);
+
+        void onLoadPlan(String planId);
+
+        void onDeletePlan(String planId);
+
+        void onClearLocalData();
+
         void onTestConnection(ServerConfig config);
 
         void onStartBackup(ServerConfig config, Uri localFolder);
 
+        void onSaveSchedule(
+                ServerConfig config, Uri localFolder, boolean enabled, int intervalHours,
+                boolean unmeteredOnly, boolean chargingOnly);
+
         void onLoadRemoteSnapshots(ServerConfig config);
 
         void onRestoreSnapshot(
-                ServerConfig config, Uri localFolder, RemoteSnapshot snapshot);
+                ServerConfig config, Uri localFolder, RemoteSnapshot snapshot,
+                String selectionPath);
+
+        void onDeleteSnapshot(ServerConfig config, RemoteSnapshot snapshot);
+        void onInspectSnapshot(ServerConfig config, RemoteSnapshot snapshot);
+
+        void onApplyRetention(ServerConfig config, int keepCount);
 
         void onCancelOperation();
     }
 
     private RadioGroup protocolGroup;
+    private EditText planId;
+    private TextView savedPlans;
     private RadioButton webDavRadio;
     private RadioButton smbRadio;
     private View webDavFields;
@@ -195,12 +218,32 @@ public final class BackupDashboardView extends ScrollView {
     private EditText remotePath;
     private TextView selectedFolderText;
     private Button chooseFolderButton;
+    private Button saveConfigurationButton;
+    private Button loadPlanButton;
+    private Button deletePlanButton;
+    private Button clearLocalButton;
     private Button testConnectionButton;
     private Button backupButton;
+    private EditText exclusions;
+    private CheckBox encryptionEnabled;
+    private EditText recoveryKey;
+    private Button generateRecoveryKeyButton;
+    private CheckBox scheduleEnabled;
+    private EditText scheduleInterval;
+    private CheckBox scheduleWifi;
+    private CheckBox scheduleCharging;
+    private Button saveScheduleButton;
+    private TextView backupHistory;
     private Button loadSnapshotsButton;
     private RadioGroup snapshotGroup;
     private TextView snapshotEmptyText;
     private Button restoreButton;
+    private EditText restorePath;
+    private Button inspectSnapshotButton;
+    private TextView snapshotContents;
+    private Button deleteSnapshotButton;
+    private EditText retentionCount;
+    private Button applyRetentionButton;
     private TextView operationStatus;
     private ProgressBar operationProgress;
     private TextView operationDetail;
@@ -245,6 +288,32 @@ public final class BackupDashboardView extends ScrollView {
         return collectConfig();
     }
 
+    public String getPlanId() { return planId.getText().toString().trim(); }
+    public String getExclusions() { return exclusions.getText().toString(); }
+    public void setExclusions(String value) { exclusions.setText(value == null ? "" : value); }
+    public String getRecoveryKey() {
+        return encryptionEnabled.isChecked() ? recoveryKey.getText().toString().trim() : "";
+    }
+    public void setRecoveryKey(String value) {
+        String safe = value == null ? "" : value;
+        encryptionEnabled.setChecked(!safe.isEmpty());
+        recoveryKey.setText(safe);
+    }
+    public int getRetentionCount() {
+        try {
+            int value = Integer.parseInt(retentionCount.getText().toString());
+            return value >= 1 && value <= 10_000 ? value : 10;
+        } catch (NumberFormatException invalid) { return 10; }
+    }
+    public void setRetentionCount(int value) { retentionCount.setText(String.valueOf(value)); }
+
+    public void setPlanId(String value) { planId.setText(value); }
+    public void setSavedPlans(List<String> planIds) {
+        savedPlans.setText(planIds == null || planIds.isEmpty()
+                ? textResource(R.string.pc_saved_plans_empty)
+                : "已保存方案：" + TextUtils.join("、", planIds));
+    }
+
     /** Populates the form, for example after restoring non-sensitive Activity state. */
     public void setServerConfig(ServerConfig config) {
         if (config == null) {
@@ -268,6 +337,7 @@ public final class BackupDashboardView extends ScrollView {
     /** Clears the password field before the Activity is backgrounded if credentials are not kept. */
     public void clearSensitiveFields() {
         password.setText("");
+        recoveryKey.setText("");
     }
 
     /**
@@ -292,6 +362,32 @@ public final class BackupDashboardView extends ScrollView {
 
     public Uri getSelectedLocalFolder() {
         return selectedLocalFolder;
+    }
+
+    public void setSchedule(
+            boolean enabled, int intervalHours, boolean unmeteredOnly, boolean chargingOnly) {
+        scheduleEnabled.setChecked(enabled);
+        scheduleInterval.setText(String.valueOf(intervalHours));
+        scheduleWifi.setChecked(unmeteredOnly);
+        scheduleCharging.setChecked(chargingOnly);
+    }
+
+    public void setBackupHistory(CharSequence summary) {
+        backupHistory.setText(TextUtils.isEmpty(summary)
+                ? textResource(R.string.pc_history_empty) : summary);
+    }
+
+    public void setSnapshotContents(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            snapshotContents.setText(R.string.pc_snapshot_contents_empty);
+            return;
+        }
+        StringBuilder text = new StringBuilder();
+        for (String path : paths) {
+            if (text.length() > 0) text.append('\n');
+            text.append(path);
+        }
+        snapshotContents.setText(text);
     }
 
     /** Updates the snapshot choices. Call showSuccess/showError separately to end a running task. */
@@ -376,6 +472,8 @@ public final class BackupDashboardView extends ScrollView {
 
     private void bindViews() {
         protocolGroup = findViewById(R.id.pc_protocol_group);
+        planId = findViewById(R.id.pc_plan_id);
+        savedPlans = findViewById(R.id.pc_saved_plans);
         webDavRadio = findViewById(R.id.pc_protocol_webdav);
         smbRadio = findViewById(R.id.pc_protocol_smb);
         webDavFields = findViewById(R.id.pc_webdav_fields);
@@ -390,12 +488,32 @@ public final class BackupDashboardView extends ScrollView {
         remotePath = findViewById(R.id.pc_remote_path);
         selectedFolderText = findViewById(R.id.pc_selected_folder);
         chooseFolderButton = findViewById(R.id.pc_choose_folder);
+        saveConfigurationButton = findViewById(R.id.pc_save_configuration);
+        loadPlanButton = findViewById(R.id.pc_load_plan);
+        deletePlanButton = findViewById(R.id.pc_delete_plan);
+        clearLocalButton = findViewById(R.id.pc_clear_local);
         testConnectionButton = findViewById(R.id.pc_test_connection);
         backupButton = findViewById(R.id.pc_start_backup);
+        exclusions = findViewById(R.id.pc_exclusions);
+        encryptionEnabled = findViewById(R.id.pc_encryption_enabled);
+        recoveryKey = findViewById(R.id.pc_recovery_key);
+        generateRecoveryKeyButton = findViewById(R.id.pc_generate_recovery_key);
+        scheduleEnabled = findViewById(R.id.pc_schedule_enabled);
+        scheduleInterval = findViewById(R.id.pc_schedule_interval);
+        scheduleWifi = findViewById(R.id.pc_schedule_wifi);
+        scheduleCharging = findViewById(R.id.pc_schedule_charging);
+        saveScheduleButton = findViewById(R.id.pc_save_schedule);
+        backupHistory = findViewById(R.id.pc_backup_history);
         loadSnapshotsButton = findViewById(R.id.pc_load_snapshots);
         snapshotGroup = findViewById(R.id.pc_snapshot_group);
         snapshotEmptyText = findViewById(R.id.pc_snapshot_empty);
         restoreButton = findViewById(R.id.pc_restore_snapshot);
+        restorePath = findViewById(R.id.pc_restore_path);
+        inspectSnapshotButton = findViewById(R.id.pc_inspect_snapshot);
+        snapshotContents = findViewById(R.id.pc_snapshot_contents);
+        deleteSnapshotButton = findViewById(R.id.pc_delete_snapshot);
+        retentionCount = findViewById(R.id.pc_retention_count);
+        applyRetentionButton = findViewById(R.id.pc_apply_retention);
         operationStatus = findViewById(R.id.pc_operation_status);
         operationProgress = findViewById(R.id.pc_operation_progress);
         operationDetail = findViewById(R.id.pc_operation_detail);
@@ -403,6 +521,8 @@ public final class BackupDashboardView extends ScrollView {
     }
 
     private void bindActions() {
+        encryptionEnabled.setOnCheckedChangeListener((button, checked) ->
+                recoveryKey.setEnabled(checked && !operationRunning));
         protocolGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(RadioGroup group, int checkedId) {
@@ -418,6 +538,43 @@ public final class BackupDashboardView extends ScrollView {
                     return;
                 }
                 listener.onChooseLocalFolder();
+            }
+        });
+
+        saveConfigurationButton.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ServerConfig config = validatedConfig();
+                if (config == null || !ensureListener()) {
+                    return;
+                }
+                listener.onSaveConfiguration(config);
+            }
+        });
+
+        loadPlanButton.setOnClickListener(new OnClickListener() {
+            @Override public void onClick(View view) {
+                if (ensureListener()) listener.onLoadPlan(getPlanId());
+            }
+        });
+        deletePlanButton.setOnClickListener(new OnClickListener() {
+            @Override public void onClick(View view) {
+                if (!ensureListener()) return;
+                new AlertDialog.Builder(getContext()).setTitle("删除本地方案？")
+                        .setMessage("只删除本机保存的方案，不会删除远端快照。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("删除", (dialog, which) ->
+                                listener.onDeletePlan(getPlanId())).show();
+            }
+        });
+        clearLocalButton.setOnClickListener(new OnClickListener() {
+            @Override public void onClick(View view) {
+                if (!ensureListener()) return;
+                new AlertDialog.Builder(getContext()).setTitle("清除所有本地数据？")
+                        .setMessage("将清除服务器配置、恢复密钥、历史、定时任务和目录授权。远端快照不会删除。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("清除", (dialog, which) ->
+                                listener.onClearLocalData()).show();
             }
         });
 
@@ -442,6 +599,37 @@ public final class BackupDashboardView extends ScrollView {
                 }
                 showOperation(textResource(R.string.pc_status_preparing_backup), true);
                 listener.onStartBackup(config, selectedLocalFolder);
+            }
+        });
+
+        saveScheduleButton.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ServerConfig config = validatedConfig();
+                if (config == null || !ensureListener()) return;
+                int hours;
+                try {
+                    hours = Integer.parseInt(scheduleInterval.getText().toString());
+                } catch (NumberFormatException invalid) {
+                    scheduleInterval.setError("请输入 1 到 720 小时");
+                    scheduleInterval.requestFocus();
+                    return;
+                }
+                if (hours < 1 || hours > 720) {
+                    scheduleInterval.setError("请输入 1 到 720 小时");
+                    scheduleInterval.requestFocus();
+                    return;
+                }
+                listener.onSaveSchedule(
+                        config, selectedLocalFolder, scheduleEnabled.isChecked(), hours,
+                        scheduleWifi.isChecked(), scheduleCharging.isChecked());
+            }
+        });
+
+        generateRecoveryKeyButton.setOnClickListener(new OnClickListener() {
+            @Override public void onClick(View view) {
+                recoveryKey.setText(RecoveryKeyCrypto.generateRecoveryKey());
+                encryptionEnabled.setChecked(true);
             }
         });
 
@@ -472,7 +660,47 @@ public final class BackupDashboardView extends ScrollView {
                     return;
                 }
                 showOperation(textResource(R.string.pc_status_preparing_restore), true);
-                listener.onRestoreSnapshot(config, selectedLocalFolder, selectedSnapshot);
+                listener.onRestoreSnapshot(
+                        config, selectedLocalFolder, selectedSnapshot,
+                        restorePath.getText().toString().trim());
+            }
+        });
+
+        deleteSnapshotButton.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ServerConfig config = validatedConfig();
+                if (config == null || selectedSnapshot == null || !ensureListener()) return;
+                RemoteSnapshot snapshot = selectedSnapshot;
+                new AlertDialog.Builder(getContext()).setTitle("永久删除远端快照？")
+                        .setMessage(snapshot.getTitle() + "\n删除后无法恢复。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("删除", (dialog, which) ->
+                                listener.onDeleteSnapshot(config, snapshot)).show();
+            }
+        });
+
+        inspectSnapshotButton.setOnClickListener(new OnClickListener() {
+            @Override public void onClick(View view) {
+                ServerConfig config = validatedConfig();
+                if (config == null || selectedSnapshot == null || !ensureListener()) return;
+                listener.onInspectSnapshot(config, selectedSnapshot);
+            }
+        });
+
+        applyRetentionButton.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                ServerConfig config = validatedConfig();
+                if (config == null || !ensureListener()) return;
+                try {
+                    int keep = Integer.parseInt(retentionCount.getText().toString());
+                    if (keep < 1 || keep > 10000) throw new NumberFormatException();
+                    listener.onApplyRetention(config, keep);
+                } catch (NumberFormatException invalid) {
+                    retentionCount.setError("请输入 1 到 10000");
+                    retentionCount.requestFocus();
+                }
             }
         });
 
@@ -554,6 +782,22 @@ public final class BackupDashboardView extends ScrollView {
 
     private ServerConfig validatedConfig() {
         clearFieldErrors();
+        if (!getPlanId().matches("[a-z0-9-]{8,64}")) {
+            planId.setError("方案标识需为 8 到 64 位小写字母、数字或连字符");
+            planId.requestFocus();
+            showError("请输入有效的方案标识");
+            return null;
+        }
+        if (encryptionEnabled.isChecked()) {
+            try {
+                RecoveryKeyCrypto.parseRecoveryKey(recoveryKey.getText().toString());
+            } catch (IllegalArgumentException invalid) {
+                recoveryKey.setError("请生成或输入有效的 256 位恢复密钥");
+                recoveryKey.requestFocus();
+                showError("启用端到端加密需要有效的恢复密钥");
+                return null;
+            }
+        }
         if (getSelectedProtocol() == Protocol.WEBDAV) {
             String url = text(webDavUrl);
             Uri parsed = Uri.parse(url);
@@ -653,18 +897,37 @@ public final class BackupDashboardView extends ScrollView {
     private void refreshActionAvailability() {
         boolean enabled = !operationRunning;
         setEnabledRecursively(protocolGroup, enabled);
+        planId.setEnabled(enabled);
         setEnabledRecursively(webDavFields, enabled);
         setEnabledRecursively(smbFields, enabled);
         username.setEnabled(enabled);
         password.setEnabled(enabled);
         remotePath.setEnabled(enabled);
         chooseFolderButton.setEnabled(enabled);
+        saveConfigurationButton.setEnabled(enabled);
+        loadPlanButton.setEnabled(enabled);
+        deletePlanButton.setEnabled(enabled);
+        clearLocalButton.setEnabled(enabled);
         testConnectionButton.setEnabled(enabled);
         backupButton.setEnabled(enabled && selectedLocalFolder != null);
+        exclusions.setEnabled(enabled);
+        encryptionEnabled.setEnabled(enabled);
+        recoveryKey.setEnabled(enabled && encryptionEnabled.isChecked());
+        generateRecoveryKeyButton.setEnabled(enabled);
+        scheduleEnabled.setEnabled(enabled);
+        scheduleInterval.setEnabled(enabled);
+        scheduleWifi.setEnabled(enabled);
+        scheduleCharging.setEnabled(enabled);
+        saveScheduleButton.setEnabled(enabled);
         loadSnapshotsButton.setEnabled(enabled);
         setEnabledRecursively(snapshotGroup, enabled);
         restoreButton.setEnabled(
                 enabled && selectedLocalFolder != null && selectedSnapshot != null);
+        restorePath.setEnabled(enabled);
+        deleteSnapshotButton.setEnabled(enabled && selectedSnapshot != null);
+        inspectSnapshotButton.setEnabled(enabled && selectedSnapshot != null);
+        retentionCount.setEnabled(enabled);
+        applyRetentionButton.setEnabled(enabled);
     }
 
     private void setEnabledRecursively(View view, boolean enabled) {

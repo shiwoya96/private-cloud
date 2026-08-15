@@ -257,6 +257,17 @@ public final class SmbStore implements RemoteStore {
     }
 
     @Override
+    public void delete(String remotePath) throws IOException {
+        String safePath = RemotePaths.normalize(remotePath);
+        if (safePath.isEmpty()) throw new IOException("Refusing to delete SMB root");
+        boolean directory = stat(safePath).isDirectory();
+        try (SmbFile target = resource(safePath, directory)) {
+            if (!target.exists()) throw notFound(safePath);
+            target.delete();
+        }
+    }
+
+    @Override
     public void close() throws IOException {
         if (closed) {
             return;
