@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.UriPermission;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,6 +13,7 @@ import android.text.format.Formatter;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.work.Constraints;
+import androidx.work.BackoffPolicy;
 import androidx.work.Data;
 import androidx.work.ExistingWorkPolicy;
 import androidx.work.NetworkType;
@@ -21,11 +23,16 @@ import androidx.work.WorkManager;
 
 import com.privatecloud.app.backup.ProgressListener;
 import com.privatecloud.app.config.ConnectionSettings;
+import com.privatecloud.app.config.BackupHistoryRepository;
+import com.privatecloud.app.config.BackupSchedule;
+import com.privatecloud.app.config.ScheduleRepository;
 import com.privatecloud.app.config.SettingsRepository;
 import com.privatecloud.app.config.SnapshotCache;
+import com.privatecloud.app.config.SnapshotContentsCache;
 import com.privatecloud.app.local.SafTree;
 import com.privatecloud.app.model.SnapshotInfo;
 import com.privatecloud.app.service.CloudWorker;
+import com.privatecloud.app.service.BackupScheduler;
 import com.privatecloud.app.ui.BackupDashboardView;
 
 import java.security.GeneralSecurityException;
@@ -34,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /** Single-screen controller for directory authorization and reliable WorkManager transfers. */
 public final class MainActivity extends Activity implements BackupDashboardView.Listener {
@@ -60,6 +68,7 @@ public final class MainActivity extends Activity implements BackupDashboardView.
         dashboard.setListener(this);
         setContentView(dashboard);
         restoreSavedConfiguration();
+        restoreScheduleAndHistory();
         requestNotificationPermissionIfNeeded();
 
         boolean restoredWork = false;
@@ -112,6 +121,23 @@ public final class MainActivity extends Activity implements BackupDashboardView.
     }
 
     @Override
+    public void onSaveConfiguration(BackupDashboardView.ServerConfig config) {
+        try {
+            settingsRepository.save(fromUi(config), dashboard.getSelectedLocalFolder());
+            new ScheduleRepository(this).saveExclusions(
+                    dashboard.getPlanId(), dashboard.getExclusions());
+            settingsRepository.saveRecoveryKey(
+                    dashboard.getPlanId(), dashboard.getRecoveryKey());
+            dashboard.setSavedPlans(settingsRepository.listPlanIds());
+            dashboard.showSuccess("已安全保存服务器配置");
+        } catch (GeneralSecurityException failure) {
+            dashboard.showError("无法安全保存服务器配置，请重试");
+        } catch (IllegalArgumentException invalid) {
+            dashboard.showError("服务器配置无效：" + safeMessage(invalid));
+        }
+    }
+
+    @Override
     public void onTestConnection(BackupDashboardView.ServerConfig config) {
         enqueue(config, dashboard.getSelectedLocalFolder(), CloudWorker.OP_TEST, null);
     }
@@ -119,6 +145,33 @@ public final class MainActivity extends Activity implements BackupDashboardView.
     @Override
     public void onStartBackup(BackupDashboardView.ServerConfig config, Uri localFolder) {
         enqueue(config, localFolder, CloudWorker.OP_BACKUP, null);
+    }
+
+    @Override
+    public void onSaveSchedule(
+            BackupDashboardView.ServerConfig config,
+            Uri localFolder,
+            boolean enabled,
+            int intervalHours,
+            boolean unmeteredOnly,
+            boolean chargingOnly) {
+        try {
+            BackupSchedule schedule = new BackupSchedule(
+                    enabled, intervalHours, unmeteredOnly, chargingOnly);
+            ConnectionSettings settings = fromUi(config);
+            new BackupHistoryRepository(this).enableRecording();
+            BackupScheduler.apply(
+                    this, schedule, settings, localFolder, dashboard.getExclusions(),
+                    dashboard.getRecoveryKey(), dashboard.getRetentionCount());
+            if (!new ScheduleRepository(this).save(dashboard.getPlanId(), schedule)) {
+                throw new GeneralSecurityException("Unable to persist schedule");
+            }
+            dashboard.showSuccess(enabled ? "已启用自动备份" : "已关闭自动备份");
+        } catch (GeneralSecurityException failure) {
+            dashboard.showError("无法安全保存自动备份设置，请重试");
+        } catch (IllegalArgumentException invalid) {
+            dashboard.showError(safeMessage(invalid));
+        }
     }
 
     @Override
@@ -130,8 +183,30 @@ public final class MainActivity extends Activity implements BackupDashboardView.
     public void onRestoreSnapshot(
             BackupDashboardView.ServerConfig config,
             Uri localFolder,
+            BackupDashboardView.RemoteSnapshot snapshot,
+            String selectionPath) {
+        enqueue(config, localFolder, CloudWorker.OP_RESTORE, snapshot.getId(), selectionPath);
+    }
+
+    @Override
+    public void onDeleteSnapshot(
+            BackupDashboardView.ServerConfig config,
             BackupDashboardView.RemoteSnapshot snapshot) {
-        enqueue(config, localFolder, CloudWorker.OP_RESTORE, snapshot.getId());
+        enqueue(config, dashboard.getSelectedLocalFolder(), CloudWorker.OP_DELETE, snapshot.getId());
+    }
+
+    @Override
+    public void onInspectSnapshot(
+            BackupDashboardView.ServerConfig config,
+            BackupDashboardView.RemoteSnapshot snapshot) {
+        enqueue(config, dashboard.getSelectedLocalFolder(), CloudWorker.OP_INSPECT, snapshot.getId());
+    }
+
+    @Override
+    public void onApplyRetention(BackupDashboardView.ServerConfig config, int keepCount) {
+        new ScheduleRepository(this).saveRetentionCount(dashboard.getPlanId(), keepCount);
+        enqueue(config, dashboard.getSelectedLocalFolder(), CloudWorker.OP_PRUNE,
+                String.valueOf(keepCount));
     }
 
     @Override
@@ -169,6 +244,13 @@ public final class MainActivity extends Activity implements BackupDashboardView.
         try {
             ConnectionSettings saved = settingsRepository.load();
             dashboard.setServerConfig(toUi(saved));
+            dashboard.setPlanId(saved.getPlanId());
+            dashboard.setExclusions(
+                    new ScheduleRepository(this).loadExclusions(saved.getPlanId()));
+            dashboard.setRecoveryKey(settingsRepository.loadRecoveryKey(saved.getPlanId()));
+            dashboard.setSavedPlans(settingsRepository.listPlanIds());
+            dashboard.setRetentionCount(
+                    new ScheduleRepository(this).loadRetentionCount(saved.getPlanId()));
             Uri treeUri = settingsRepository.loadTreeUri();
             if (treeUri != null) dashboard.setSelectedLocalFolder(treeUri, treeUri.getLastPathSegment());
         } catch (GeneralSecurityException damagedCredentials) {
@@ -178,17 +260,175 @@ public final class MainActivity extends Activity implements BackupDashboardView.
         }
     }
 
+    @Override
+    public void onLoadPlan(String planId) {
+        try {
+            ConnectionSettings saved = settingsRepository.loadPlan(planId);
+            dashboard.setServerConfig(toUi(saved));
+            dashboard.setPlanId(saved.getPlanId());
+            dashboard.setExclusions(new ScheduleRepository(this).loadExclusions(planId));
+            dashboard.setRecoveryKey(settingsRepository.loadRecoveryKey(planId));
+            dashboard.setRetentionCount(
+                    new ScheduleRepository(this).loadRetentionCount(planId));
+            BackupSchedule planSchedule = new ScheduleRepository(this).load(planId);
+            dashboard.setSchedule(
+                    planSchedule.isEnabled(), planSchedule.getIntervalHours(),
+                    planSchedule.isUnmeteredOnly(), planSchedule.isChargingOnly());
+            Uri treeUri = settingsRepository.loadPlanTreeUri(planId);
+            dashboard.setSelectedLocalFolder(
+                    treeUri, treeUri == null ? null : treeUri.getLastPathSegment());
+            dashboard.showSuccess("已加载备份方案");
+        } catch (GeneralSecurityException | IllegalArgumentException failure) {
+            dashboard.showError("无法加载该备份方案");
+        }
+    }
+
+    @Override
+    public void onDeletePlan(String planId) {
+        try {
+            Uri treeUri = settingsRepository.loadPlanTreeUri(planId);
+            boolean sharedTreeUri = isTreeUriUsedByAnotherPlan(planId, treeUri);
+            settingsRepository.deletePlan(planId);
+            new ScheduleRepository(this).deletePlan(planId);
+            workManager.cancelUniqueWork(BackupScheduler.UNIQUE_WORK_NAME + ":" + planId);
+            if (treeUri != null && !sharedTreeUri) releaseTreePermission(treeUri);
+            dashboard.setServerConfig(BackupDashboardView.ServerConfig.webDav("", "", "", ""));
+            dashboard.setPlanId("default-plan");
+            dashboard.setSelectedLocalFolder(null, null);
+            dashboard.setExclusions("");
+            dashboard.setRecoveryKey("");
+            dashboard.setSchedule(false, 24, true, false);
+            dashboard.setSavedPlans(settingsRepository.listPlanIds());
+            dashboard.showSuccess("已删除本地方案；远端快照未删除");
+        } catch (GeneralSecurityException | IllegalArgumentException failure) {
+            dashboard.showError("无法删除该备份方案");
+        }
+    }
+
+    private boolean isTreeUriUsedByAnotherPlan(String deletedPlanId, Uri treeUri) {
+        if (treeUri == null) return false;
+        for (String otherPlanId : settingsRepository.listPlanIds()) {
+            if (deletedPlanId.equals(otherPlanId)) continue;
+            try {
+                if (treeUri.equals(settingsRepository.loadPlanTreeUri(otherPlanId))) return true;
+            } catch (GeneralSecurityException damagedPlan) {
+                // Keep the grant when another plan cannot be inspected safely.
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean releaseTreePermission(Uri treeUri) {
+        int flags = 0;
+        for (UriPermission permission : getContentResolver().getPersistedUriPermissions()) {
+            if (!treeUri.equals(permission.getUri())) continue;
+            if (permission.isReadPermission()) flags |= Intent.FLAG_GRANT_READ_URI_PERMISSION;
+            if (permission.isWritePermission()) flags |= Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+        }
+        if (flags == 0) return true;
+        try {
+            getContentResolver().releasePersistableUriPermission(treeUri, flags);
+            return true;
+        } catch (SecurityException alreadyRevoked) {
+            // The provider or user may already have revoked this grant.
+            return false;
+        }
+    }
+
+    @Override
+    public void onClearLocalData() {
+        stopRecoveringWork();
+        stopObservingWork();
+        activeWorkId = null;
+        activeOperation = null;
+        workManager.cancelAllWorkByTag(CloudWorker.TAG);
+        ArrayList<Uri> treeUris = new ArrayList<Uri>();
+        for (UriPermission permission : getContentResolver().getPersistedUriPermissions()) {
+            if (!treeUris.contains(permission.getUri())) treeUris.add(permission.getUri());
+        }
+        boolean cleared = true;
+        try {
+            settingsRepository.clearAll();
+        } catch (GeneralSecurityException failure) {
+            cleared = false;
+        }
+        if (!new BackupHistoryRepository(this).clearAndDisable()) cleared = false;
+        if (!new SnapshotContentsCache(this).clear()) cleared = false;
+        if (!new SnapshotCache(this).clear()) cleared = false;
+        if (!new ScheduleRepository(this).clear()) cleared = false;
+        for (Uri treeUri : treeUris) {
+            if (!releaseTreePermission(treeUri)) cleared = false;
+        }
+        dashboard.setServerConfig(BackupDashboardView.ServerConfig.webDav("", "", "", ""));
+        dashboard.setPlanId("default-plan");
+        dashboard.setSelectedLocalFolder(null, null);
+        dashboard.setExclusions("");
+        dashboard.setRecoveryKey("");
+        dashboard.setSchedule(false, 24, true, false);
+        dashboard.setBackupHistory(null);
+        dashboard.setSavedPlans(java.util.Collections.<String>emptyList());
+        if (cleared) {
+            dashboard.showSuccess("已清除本地配置、历史和目录授权");
+        } else {
+            dashboard.showError("无法完整清除本地配置或目录授权");
+        }
+    }
+
+    private void restoreScheduleAndHistory() {
+        BackupSchedule schedule = new ScheduleRepository(this).load(dashboard.getPlanId());
+        dashboard.setSchedule(
+                schedule.isEnabled(), schedule.getIntervalHours(),
+                schedule.isUnmeteredOnly(), schedule.isChargingOnly());
+        refreshHistory();
+    }
+
+    private void refreshHistory() {
+        List<BackupHistoryRepository.Entry> history =
+                new BackupHistoryRepository(this).loadRecent(5);
+        if (history.isEmpty()) {
+            dashboard.setBackupHistory(null);
+            return;
+        }
+        StringBuilder summary = new StringBuilder();
+        for (BackupHistoryRepository.Entry entry : history) {
+            if (summary.length() > 0) summary.append("\n\n");
+            String operation = CloudWorker.OP_BACKUP.equals(entry.operation) ? "备份"
+                    : CloudWorker.OP_RESTORE.equals(entry.operation) ? "恢复" : "任务";
+            String time = DateFormat.getDateTimeInstance(
+                    DateFormat.MEDIUM, DateFormat.SHORT).format(new Date(entry.finishedAt));
+            summary.append(time).append(" · ").append(operation)
+                    .append(entry.success ? "成功" : "失败")
+                    .append("\n").append(entry.detail);
+        }
+        dashboard.setBackupHistory(summary);
+    }
+
     private void enqueue(
             BackupDashboardView.ServerConfig config,
             Uri localFolder,
             String operation,
             String snapshotId) {
+        enqueue(config, localFolder, operation, snapshotId, "");
+    }
+
+    private void enqueue(
+            BackupDashboardView.ServerConfig config, Uri localFolder, String operation,
+            String snapshotId, String selectionPath) {
         try {
             ConnectionSettings settings = fromUi(config);
+            new BackupHistoryRepository(this).enableRecording();
+            settingsRepository.saveRecoveryKey(settings.getPlanId(), dashboard.getRecoveryKey());
+            ScheduleRepository planPreferences = new ScheduleRepository(this);
+            planPreferences.saveExclusions(settings.getPlanId(), dashboard.getExclusions());
+            planPreferences.saveRetentionCount(
+                    settings.getPlanId(), dashboard.getRetentionCount());
             UUID requestId = UUID.randomUUID();
             String jobKey = requestId.toString();
             String encryptedSpec = settingsRepository.prepareOperation(
-                    jobKey, settings, localFolder, operation, snapshotId);
+                    jobKey, settings, localFolder, operation, snapshotId, selectionPath,
+                    dashboard.getExclusions(), dashboard.getRecoveryKey(),
+                    dashboard.getRetentionCount());
             Data input = new Data.Builder()
                     .putString(CloudWorker.KEY_ENCRYPTED_SPEC, encryptedSpec)
                     .build();
@@ -199,6 +439,7 @@ public final class MainActivity extends Activity implements BackupDashboardView.
                     .setId(requestId)
                     .setInputData(input)
                     .setConstraints(constraints)
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                     .addTag(CloudWorker.TAG)
                     .addTag(CloudWorker.TAG + ":" + operation)
                     .build();
@@ -287,7 +528,10 @@ public final class MainActivity extends Activity implements BackupDashboardView.
             if (CloudWorker.OP_TEST.equals(operation)
                     || CloudWorker.OP_BACKUP.equals(operation)
                     || CloudWorker.OP_LIST.equals(operation)
-                    || CloudWorker.OP_RESTORE.equals(operation)) {
+                    || CloudWorker.OP_RESTORE.equals(operation)
+                    || CloudWorker.OP_DELETE.equals(operation)
+                    || CloudWorker.OP_PRUNE.equals(operation)
+                    || CloudWorker.OP_INSPECT.equals(operation)) {
                 return operation;
             }
         }
@@ -320,14 +564,25 @@ public final class MainActivity extends Activity implements BackupDashboardView.
             return;
         }
 
+        boolean refreshSnapshots = false;
         if (state == WorkInfo.State.SUCCEEDED) {
             String message = info.getOutputData().getString(CloudWorker.KEY_MESSAGE);
             if (CloudWorker.OP_LIST.equals(operation)) {
                 dashboard.showSnapshots(loadCachedSnapshots());
+            } else if (CloudWorker.OP_INSPECT.equals(operation)) {
+                BackupDashboardView.RemoteSnapshot snapshot = dashboard.getSelectedSnapshot();
+                if (snapshot != null) {
+                    dashboard.setSnapshotContents(new SnapshotContentsCache(this).load(
+                            dashboard.getPlanId(), snapshot.getId()));
+                }
+                dashboard.showSuccess(emptyFallback(message, "快照内容读取完成"));
             } else {
                 dashboard.showSuccess(emptyFallback(message, "任务完成"));
+                refreshSnapshots = CloudWorker.OP_DELETE.equals(operation)
+                        || CloudWorker.OP_PRUNE.equals(operation);
             }
         } else if (state == WorkInfo.State.CANCELLED) {
+            new BackupHistoryRepository(this).record(operation, false, "任务已取消");
             dashboard.showError("任务已取消；已完成的旧快照不会受到影响");
         } else if (state == WorkInfo.State.FAILED) {
             dashboard.showError(emptyFallback(
@@ -338,6 +593,16 @@ public final class MainActivity extends Activity implements BackupDashboardView.
         activeWorkId = null;
         activeOperation = null;
         stopObservingWork();
+        refreshHistory();
+        if (refreshSnapshots) {
+            new SnapshotCache(this).save(
+                    settingsRepository.getOrCreatePlanId(),
+                    java.util.Collections.<SnapshotInfo>emptyList());
+            dashboard.setSnapshots(
+                    java.util.Collections.<BackupDashboardView.RemoteSnapshot>emptyList());
+            enqueue(dashboard.getServerConfig(), dashboard.getSelectedLocalFolder(),
+                    CloudWorker.OP_LIST, null);
+        }
     }
 
     private List<BackupDashboardView.RemoteSnapshot> loadCachedSnapshots() {
@@ -379,7 +644,7 @@ public final class MainActivity extends Activity implements BackupDashboardView.
                 config.getUsername(),
                 config.getPassword(),
                 config.getRemotePath(),
-                settingsRepository.getOrCreatePlanId());
+                dashboard.getPlanId());
     }
 
     private static BackupDashboardView.ServerConfig toUi(ConnectionSettings settings) {

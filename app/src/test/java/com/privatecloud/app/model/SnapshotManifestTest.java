@@ -24,7 +24,8 @@ public final class SnapshotManifestTest {
                 "1770000000000-12345678-1234-1234-1234-123456789abc",
                 1770000000000L,
                 "手机照片",
-                Arrays.asList(file, directory));
+                Arrays.asList(file, directory),
+                "0123456789AB");
 
         byte[] encoded = original.toJsonBytes();
         SnapshotManifest decoded = SnapshotManifest.fromJsonBytes(encoded);
@@ -32,6 +33,7 @@ public final class SnapshotManifestTest {
         assertEquals(original.getPlanId(), decoded.getPlanId());
         assertEquals(original.getEntries(), decoded.getEntries());
         assertEquals(original.getTotalBytes(), decoded.getTotalBytes());
+        assertEquals("0123456789AB", decoded.getEncryptionFingerprint());
         assertEquals(new String(encoded, "UTF-8"), new String(decoded.toJsonBytes(), "UTF-8"));
     }
 

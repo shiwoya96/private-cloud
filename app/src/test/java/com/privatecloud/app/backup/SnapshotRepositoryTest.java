@@ -25,6 +25,18 @@ public final class SnapshotRepositoryTest {
             "1770000000000-12345678-1234-1234-1234-123456789abc";
 
     @Test
+    public void deleteCommittedRemovesOnlyValidatedSnapshotTree() throws Exception {
+        FakeRemoteStore remote = committedStore();
+        new SnapshotRepository(remote).deleteCommitted(PLAN, SNAPSHOT, CancellationToken.NONE);
+        try {
+            remote.stat(SnapshotLayout.snapshotRoot(PLAN, SNAPSHOT));
+            org.junit.Assert.fail("snapshot should be deleted");
+        } catch (FileNotFoundException expected) {
+            // Expected.
+        }
+    }
+
+    @Test
     public void onlyCompleteValidatedSnapshotIsVisible() throws Exception {
         FakeRemoteStore remote = committedStore();
 
@@ -149,6 +161,15 @@ public final class SnapshotRepositoryTest {
                 current = current.isEmpty() ? segment : current + "/" + segment;
                 createDirectory(current);
             }
+        }
+
+        @Override public void delete(String path) throws IOException {
+            boolean removed = files.remove(path) != null;
+            String prefix = path + "/";
+            removed |= files.keySet().removeIf(value -> value.startsWith(prefix));
+            removed |= directories.removeIf(
+                    value -> value.equals(path) || value.startsWith(prefix));
+            if (!removed) throw new FileNotFoundException(path);
         }
 
         @Override public void close() {}

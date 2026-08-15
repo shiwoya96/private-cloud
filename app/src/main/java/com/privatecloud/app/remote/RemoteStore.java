@@ -41,6 +41,9 @@ public interface RemoteStore extends Closeable {
     /** Creates the directory and any missing ancestors below the configured root. */
     void createDirectories(String remotePath) throws IOException;
 
+    /** Deletes one file or directory tree below the configured root. */
+    void delete(String remotePath) throws IOException;
+
     @Override
     void close() throws IOException;
 }

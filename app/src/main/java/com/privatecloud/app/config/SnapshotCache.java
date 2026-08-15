@@ -77,6 +77,8 @@ public final class SnapshotCache {
         return Collections.unmodifiableList(result);
     }
 
+    public synchronized boolean clear() { return preferences.edit().clear().commit(); }
+
     private static String key(String planId) {
         if (planId == null || !planId.matches("[a-z0-9-]{8,64}")) {
             throw new IllegalArgumentException("Invalid plan id");

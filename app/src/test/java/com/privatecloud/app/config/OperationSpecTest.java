@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
 import org.junit.Test;
+import com.privatecloud.app.backup.RecoveryKeyCrypto;
 
 public final class OperationSpecTest {
     @Test
@@ -19,11 +20,13 @@ public final class OperationSpecTest {
                 "p@ss\"word",
                 "pixel/photos",
                 "12345678-abcd");
+        String recoveryKey = RecoveryKeyCrypto.generateRecoveryKey();
         OperationSpec original = new OperationSpec(
                 "restore",
                 "20260813T101112Z-deadbeef",
                 settings,
-                "content://com.example/tree/primary%3APictures");
+                "content://com.example/tree/primary%3APictures",
+                "Camera/important", "*.tmp\nCache", recoveryKey, 17);
 
         OperationSpec decoded = OperationSpec.fromJson(original.toJson());
 
@@ -36,6 +39,10 @@ public final class OperationSpecTest {
         assertEquals("手机备份", decoded.getSettings().getSmbShare());
         assertEquals("p@ss\"word", decoded.getSettings().getPassword());
         assertEquals("pixel/photos", decoded.getSettings().getRemotePath());
+        assertEquals("Camera/important", decoded.getSelectionPath());
+        assertEquals("*.tmp\nCache", decoded.getExclusions());
+        assertEquals(recoveryKey, decoded.getRecoveryKey());
+        assertEquals(17, decoded.getRetentionCount());
     }
 
     @Test(expected = IllegalArgumentException.class)
