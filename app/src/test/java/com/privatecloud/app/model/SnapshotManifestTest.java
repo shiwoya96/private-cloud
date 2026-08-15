@@ -1,7 +1,9 @@
 package com.privatecloud.app.model;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -35,6 +37,39 @@ public final class SnapshotManifestTest {
         assertEquals(original.getTotalBytes(), decoded.getTotalBytes());
         assertEquals("0123456789AB", decoded.getEncryptionFingerprint());
         assertEquals(new String(encoded, "UTF-8"), new String(decoded.toJsonBytes(), "UTF-8"));
+        assertFalse(decoded.usesOriginalPaths());
+    }
+
+    @Test
+    public void unencryptedManifestUsesOriginalPaths() throws Exception {
+        ManifestEntry file = ManifestEntry.file(
+                Collections.singletonList("照片.jpg"),
+                "12345678-1234-1234-1234-123456789abc",
+                42L,
+                34L,
+                "image/jpeg",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+        SnapshotManifest manifest = new SnapshotManifest(
+                "12345678-abcd",
+                "1770000000000-12345678-1234-1234-1234-123456789abc",
+                1770000000000L,
+                "手机照片",
+                Collections.singletonList(file));
+
+        assertTrue(manifest.usesOriginalPaths());
+        assertTrue(new String(manifest.toJsonBytes(), "UTF-8")
+                .contains("\"storageLayout\":\"original-paths\""));
+    }
+
+    @Test
+    public void schemaTwoManifestKeepsLegacyOpaqueObjects() throws Exception {
+        String legacy = "{\"schema\":2,\"planId\":\"default-plan\","
+                + "\"snapshotId\":\"snapshot-1\",\"createdAt\":1,"
+                + "\"sourceName\":\"source\",\"encryptionFingerprint\":\"\","
+                + "\"entries\":[]}";
+
+        assertFalse(SnapshotManifest.fromJsonBytes(legacy.getBytes("UTF-8"))
+                .usesOriginalPaths());
     }
 
     @Test(expected = IllegalArgumentException.class)

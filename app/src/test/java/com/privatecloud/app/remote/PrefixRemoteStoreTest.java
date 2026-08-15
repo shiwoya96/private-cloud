@@ -24,6 +24,15 @@ public final class PrefixRemoteStoreTest {
         store.delete(".private-cloud/v1/old");
         assertEquals("phones/pixel/.private-cloud/v1/old", delegate.lastPath);
 
+        store.upload(
+                ".private-cloud/v1/files/photo.jpg",
+                new java.io.ByteArrayInputStream(new byte[0]),
+                0L,
+                "image/jpeg",
+                false);
+        assertEquals("phones/pixel/.private-cloud/v1/files/photo.jpg", delegate.lastPath);
+        assertEquals("image/jpeg", delegate.lastContentType);
+
         delegate.entry = new RemoteEntry(
                 "phones/pixel/.private-cloud", ".private-cloud", true, 0L, 0L, null);
         RemoteEntry mapped = store.stat(".private-cloud");
@@ -39,6 +48,7 @@ public final class PrefixRemoteStoreTest {
 
     private static final class RecordingStore implements RemoteStore {
         String lastPath;
+        String lastContentType;
         RemoteEntry entry;
 
         @Override public RemoteEntry stat(String path) throws IOException {
@@ -54,6 +64,12 @@ public final class PrefixRemoteStoreTest {
         @Override public void upload(
                 String path, InputStream source, long length, boolean overwrite) {
             lastPath = path;
+        }
+        @Override public void upload(
+                String path, InputStream source, long length, String contentType,
+                boolean overwrite) {
+            lastPath = path;
+            lastContentType = contentType;
         }
         @Override public void createDirectory(String path) { lastPath = path; }
         @Override public void createDirectories(String path) { lastPath = path; }

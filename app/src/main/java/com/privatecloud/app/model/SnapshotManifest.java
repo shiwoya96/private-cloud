@@ -24,7 +24,7 @@ import org.json.JSONTokener;
 
 /** Versioned, validated description of one complete local directory snapshot. */
 public final class SnapshotManifest {
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 3;
     public static final int MAX_ENTRIES = 100_000;
     public static final int MAX_JSON_BYTES = 16 * 1024 * 1024;
     /** Stable remote namespace for the MVP's single active backup plan. */
@@ -32,6 +32,8 @@ public final class SnapshotManifest {
 
     private static final Pattern PLAN_ID = Pattern.compile("[A-Za-z0-9_-]{1,64}");
     private static final Pattern SNAPSHOT_ID = Pattern.compile("[A-Za-z0-9_.-]{1,96}");
+    private static final String STORAGE_ORIGINAL_PATHS = "original-paths";
+    private static final String STORAGE_OPAQUE_OBJECTS = "opaque-objects";
 
     private final String planId;
     private final String snapshotId;
@@ -42,6 +44,7 @@ public final class SnapshotManifest {
     private final long directoryCount;
     private final long totalBytes;
     private final String encryptionFingerprint;
+    private final String storageLayout;
 
     public SnapshotManifest(
             String planId,
@@ -55,6 +58,19 @@ public final class SnapshotManifest {
     public SnapshotManifest(
             String planId, String snapshotId, long createdAt, String sourceName,
             List<ManifestEntry> entries, String encryptionFingerprint) {
+        this(
+                planId,
+                snapshotId,
+                createdAt,
+                sourceName,
+                entries,
+                encryptionFingerprint,
+                defaultStorageLayout(encryptionFingerprint));
+    }
+
+    private SnapshotManifest(
+            String planId, String snapshotId, long createdAt, String sourceName,
+            List<ManifestEntry> entries, String encryptionFingerprint, String storageLayout) {
         this.planId = requirePlanId(planId);
         this.snapshotId = requireSnapshotId(snapshotId);
         if (createdAt <= 0L) {
@@ -67,6 +83,12 @@ public final class SnapshotManifest {
         if (!this.encryptionFingerprint.isEmpty()
                 && !this.encryptionFingerprint.matches("[0-9A-F]{12}")) {
             throw new IllegalArgumentException("Invalid encryption fingerprint");
+        }
+        this.storageLayout = requireStorageLayout(storageLayout);
+        if (!this.encryptionFingerprint.isEmpty()
+                && STORAGE_ORIGINAL_PATHS.equals(this.storageLayout)) {
+            throw new IllegalArgumentException(
+                    "Encrypted snapshots cannot use directly browsable storage");
         }
         if (entries == null) {
             throw new IllegalArgumentException("entries must not be null");
@@ -131,6 +153,9 @@ public final class SnapshotManifest {
         return totalBytes;
     }
     public String getEncryptionFingerprint() { return encryptionFingerprint; }
+    public boolean usesOriginalPaths() {
+        return STORAGE_ORIGINAL_PATHS.equals(storageLayout);
+    }
 
     /** Serializes using a stable field and entry order. The returned bytes are the hashed payload. */
     public byte[] toJsonBytes() throws IOException {
@@ -142,6 +167,7 @@ public final class SnapshotManifest {
             root.put("createdAt", createdAt);
             root.put("sourceName", sourceName);
             root.put("encryptionFingerprint", encryptionFingerprint);
+            root.put("storageLayout", storageLayout);
             JSONArray encodedEntries = new JSONArray();
             for (ManifestEntry entry : entries) {
                 JSONObject encoded = new JSONObject();
@@ -183,7 +209,7 @@ public final class SnapshotManifest {
         try {
             JSONObject root = decodeObject(bytes);
             long schema = requireLong(root, "schema");
-            if (schema != 1 && schema != SCHEMA_VERSION) {
+            if (schema != 1 && schema != 2 && schema != SCHEMA_VERSION) {
                 throw new IOException("Unsupported snapshot manifest schema: " + schema);
             }
             String planId = requireString(root, "planId");
@@ -192,6 +218,8 @@ public final class SnapshotManifest {
             String sourceName = requireString(root, "sourceName");
             String encryptionFingerprint = schema >= 2
                     ? requireString(root, "encryptionFingerprint") : "";
+            String storageLayout = schema >= 3
+                    ? requireString(root, "storageLayout") : STORAGE_OPAQUE_OBJECTS;
             JSONArray encodedEntries = root.getJSONArray("entries");
             if (encodedEntries.length() > MAX_ENTRIES) {
                 throw new IOException("Snapshot contains too many entries");
@@ -243,7 +271,13 @@ public final class SnapshotManifest {
                 }
             }
             return new SnapshotManifest(
-                    planId, snapshotId, createdAt, sourceName, entries, encryptionFingerprint);
+                    planId,
+                    snapshotId,
+                    createdAt,
+                    sourceName,
+                    entries,
+                    encryptionFingerprint,
+                    storageLayout);
         } catch (JSONException malformed) {
             throw new IOException("Invalid snapshot manifest JSON", malformed);
         } catch (IllegalArgumentException invalid) {
@@ -313,6 +347,18 @@ public final class SnapshotManifest {
                 throw new IllegalArgumentException("sourceName contains an invalid character");
             }
             offset += Character.charCount(codePoint);
+        }
+        return value;
+    }
+
+    private static String defaultStorageLayout(String encryptionFingerprint) {
+        return encryptionFingerprint == null || encryptionFingerprint.isEmpty()
+                ? STORAGE_ORIGINAL_PATHS : STORAGE_OPAQUE_OBJECTS;
+    }
+
+    private static String requireStorageLayout(String value) {
+        if (!STORAGE_ORIGINAL_PATHS.equals(value) && !STORAGE_OPAQUE_OBJECTS.equals(value)) {
+            throw new IllegalArgumentException("Unsupported snapshot storage layout");
         }
         return value;
     }
