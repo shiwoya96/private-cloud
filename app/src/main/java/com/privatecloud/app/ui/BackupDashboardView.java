@@ -17,6 +17,7 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.privatecloud.app.R;
 import com.privatecloud.app.backup.RecoveryKeyCrypto;
@@ -26,7 +27,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Complete single-screen UI for configuring a private-cloud target and starting backup/restore
+ * Tabbed dashboard UI for configuring a private-cloud target and starting backup/restore
  * operations. This class deliberately depends only on Android framework widgets so that a host
  * Activity can use it with {@code setContentView(new BackupDashboardView(this))}.
  *
@@ -201,6 +202,11 @@ public final class BackupDashboardView extends ScrollView {
         void onCancelOperation();
     }
 
+    private RadioGroup tabGroup;
+    private View serverTabContent;
+    private View backupTabContent;
+    private View restoreTabContent;
+    private View statusTabContent;
     private RadioGroup protocolGroup;
     private EditText planId;
     private TextView savedPlans;
@@ -254,6 +260,7 @@ public final class BackupDashboardView extends ScrollView {
     private RemoteSnapshot selectedSnapshot;
     private List<RemoteSnapshot> snapshots = Collections.emptyList();
     private boolean operationRunning;
+    private Toast popupToast;
 
     public BackupDashboardView(Context context) {
         this(context, null);
@@ -269,6 +276,7 @@ public final class BackupDashboardView extends ScrollView {
         inflate(context, R.layout.pc_view_backup_dashboard, this);
         bindViews();
         bindActions();
+        renderTab(R.id.pc_tab_server);
         renderProtocol(Protocol.WEBDAV);
         renderSnapshots();
         renderIdle();
@@ -425,6 +433,7 @@ public final class BackupDashboardView extends ScrollView {
         cancelButton.setVisibility(cancellable ? VISIBLE : GONE);
         cancelButton.setEnabled(cancellable);
         refreshActionAvailability();
+        selectTab(R.id.pc_tab_status);
         announceStatus();
     }
 
@@ -446,6 +455,7 @@ public final class BackupDashboardView extends ScrollView {
             operationDetail.setVisibility(VISIBLE);
         }
         refreshActionAvailability();
+        selectTab(R.id.pc_tab_status);
     }
 
     public void showSuccess(CharSequence message) {
@@ -471,6 +481,11 @@ public final class BackupDashboardView extends ScrollView {
     }
 
     private void bindViews() {
+        tabGroup = findViewById(R.id.pc_tab_group);
+        serverTabContent = findViewById(R.id.pc_tab_server_content);
+        backupTabContent = findViewById(R.id.pc_tab_backup_content);
+        restoreTabContent = findViewById(R.id.pc_tab_restore_content);
+        statusTabContent = findViewById(R.id.pc_tab_status_content);
         protocolGroup = findViewById(R.id.pc_protocol_group);
         planId = findViewById(R.id.pc_plan_id);
         savedPlans = findViewById(R.id.pc_saved_plans);
@@ -521,6 +536,13 @@ public final class BackupDashboardView extends ScrollView {
     }
 
     private void bindActions() {
+        tabGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                renderTab(checkedId);
+                post(() -> smoothScrollTo(0, 0));
+            }
+        });
         encryptionEnabled.setOnCheckedChangeListener((button, checked) ->
                 recoveryKey.setEnabled(checked && !operationRunning));
         protocolGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
@@ -892,6 +914,42 @@ public final class BackupDashboardView extends ScrollView {
         cancelButton.setVisibility(GONE);
         refreshActionAvailability();
         announceStatus();
+        showPopup(message);
+    }
+
+    private void renderTab(int checkedId) {
+        serverTabContent.setVisibility(checkedId == R.id.pc_tab_server ? VISIBLE : GONE);
+        backupTabContent.setVisibility(checkedId == R.id.pc_tab_backup ? VISIBLE : GONE);
+        restoreTabContent.setVisibility(checkedId == R.id.pc_tab_restore ? VISIBLE : GONE);
+        statusTabContent.setVisibility(checkedId == R.id.pc_tab_status ? VISIBLE : GONE);
+    }
+
+    private void selectTab(int tabId) {
+        if (tabGroup.getCheckedRadioButtonId() == tabId) {
+            renderTab(tabId);
+            return;
+        }
+        tabGroup.check(tabId);
+    }
+
+    private void showPopup(CharSequence message) {
+        if (TextUtils.isEmpty(message)) {
+            return;
+        }
+        if (popupToast != null) {
+            popupToast.cancel();
+        }
+        popupToast = Toast.makeText(getContext(), message, Toast.LENGTH_LONG);
+        popupToast.show();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (popupToast != null) {
+            popupToast.cancel();
+            popupToast = null;
+        }
+        super.onDetachedFromWindow();
     }
 
     private void refreshActionAvailability() {

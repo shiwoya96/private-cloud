@@ -60,6 +60,21 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <style name="PcTabButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/pc_bg_tab</item>
+        <item name="android:button">@null</item>
+        <item name="android:gravity">center</item>
+        <item name="android:minHeight">@dimen/pc_touch_target</item>
+        <item name="android:paddingStart">@dimen/pc_space_4</item>
+        <item name="android:paddingEnd">@dimen/pc_space_4</item>
+        <item name="android:textColor">@color/pc_tab_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
     <style name="PcSecondaryButton">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
