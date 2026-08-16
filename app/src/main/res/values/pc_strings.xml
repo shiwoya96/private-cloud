@@ -6,6 +6,11 @@
     <string name="pc_security_title">安全提醒</string>
     <string name="pc_security_message">仅连接你信任的服务器，WebDAV 优先使用 HTTPS，SMB 建议启用 SMB 3 加密。恢复会创建新目录且不覆盖原文件，仍请先核对目标目录和快照。</string>
 
+    <string name="pc_tab_server">服务器</string>
+    <string name="pc_tab_backup">备份</string>
+    <string name="pc_tab_restore">恢复</string>
+    <string name="pc_tab_status">状态</string>
+
     <string name="pc_server_section_title">1. 服务器配置</string>
     <string name="pc_protocol_label">连接方式</string>
     <string name="pc_plan_id_hint">方案标识，例如 photos-nas</string>

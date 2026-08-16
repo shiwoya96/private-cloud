@@ -42,7 +42,39 @@
             android:textColor="@color/pc_warning_text" />
     </LinearLayout>
 
+    <RadioGroup
+        android:id="@+id/pc_tab_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/pc_space_16"
+        android:background="@drawable/pc_bg_card"
+        android:orientation="horizontal"
+        android:padding="@dimen/pc_space_4">
+
+        <RadioButton
+            android:id="@+id/pc_tab_server"
+            style="@style/PcTabButton"
+            android:checked="true"
+            android:text="@string/pc_tab_server" />
+
+        <RadioButton
+            android:id="@+id/pc_tab_backup"
+            style="@style/PcTabButton"
+            android:text="@string/pc_tab_backup" />
+
+        <RadioButton
+            android:id="@+id/pc_tab_restore"
+            style="@style/PcTabButton"
+            android:text="@string/pc_tab_restore" />
+
+        <RadioButton
+            android:id="@+id/pc_tab_status"
+            style="@style/PcTabButton"
+            android:text="@string/pc_tab_status" />
+    </RadioGroup>
+
     <LinearLayout
+        android:id="@+id/pc_tab_server_content"
         style="@style/PcSectionCard"
         android:orientation="vertical">
 
@@ -213,8 +245,10 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/pc_tab_backup_content"
         style="@style/PcSectionCard"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:visibility="gone">
 
         <TextView
             style="@style/PcSectionTitle"
@@ -318,8 +352,10 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/pc_tab_restore_content"
         style="@style/PcSectionCard"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:visibility="gone">
 
         <TextView
             style="@style/PcSectionTitle"
@@ -400,9 +436,11 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/pc_tab_status_content"
         style="@style/PcSectionCard"
         android:layout_marginBottom="0dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:visibility="gone">
 
         <TextView
             style="@style/PcSectionTitle"
